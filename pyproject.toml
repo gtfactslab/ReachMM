@@ -1,0 +1,13 @@
+# [build-system]
+# requires = [""]
+
+[project]
+name = "ReachMM"
+version = "0.0.1"
+dependencies = [
+    "numpy",
+    "scipy",
+    "tqdm",
+    "time",
+    "functools"
+]
