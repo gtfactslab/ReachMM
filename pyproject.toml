@@ -1,0 +1,18 @@
+# [build-system]
+# requires = [""]
+
+[tool.setuptools]
+packages = ["ReachMM"]
+
+[project]
+name = "ReachMM"
+version = "0.0.1"
+dependencies = [
+    "numpy",
+    "scipy",
+    "tqdm",
+    "shapely",
+    "matplotlib",
+    "casadi",
+    "tabulate"
+]
