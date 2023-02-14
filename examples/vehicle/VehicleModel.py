@@ -6,7 +6,7 @@ from ReachMM.decomp import d_sin, d_cos, d_b1b2
 
 # For Controller Testing, run this file to simulate trajectories.
 METHOD = 'nn'
-NNFILE = 'twoobs'
+NNFILE = 'twoobs-nost'
 
 '''
 x = [
@@ -74,57 +74,67 @@ class VehicleModel (MixedMonotoneModel):
         return d_b1b2( (x[3] , d_sin(beta, betah)),
                     (xhat[3], d_sin(betah, beta)))
 
-# if __name__ == '__main__' :
-#     from VehicleMPCController import VehicleMPCController
-#     from VehicleUtils import *
-#     from VehicleModel import VehicleModel
-#     from VehicleNeuralNetwork import VehicleNeuralNetwork, VehicleStateTransformation
-#     from NeuralNetworkControl import NeuralNetworkControl
-#     import matplotlib.pyplot as plt
-#     import time
+if __name__ == '__main__' :
+    from VehicleMPCController import VehicleMPCController
+    from VehicleUtils import *
+    from VehicleModel import VehicleModel
+    from VehicleNeuralNetwork import VehicleNeuralNetwork, VehicleStateTransformation
+    from ReachMM import NeuralNetworkControl
+    import matplotlib.pyplot as plt
+    import time
 
-#     XRANGE = ([-10,10],)
-#     YRANGE = ([6,10],)
-#     PRANGE = ([-np.pi,np.pi],)
-#     VRANGE = ([-10,10],)
+    XRANGE = ([-10,10],)
+    YRANGE = ([6,10],)
+    PRANGE = ([-np.pi,np.pi],)
+    VRANGE = ([-10,10],)
 
-#     problem_horizon = 20
-#     NUM_ICS = 100
-#     t_step = 0.01
+    problem_horizon = 8
+    NUM_ICS = 100
+    t_step = 0.01
 
-#     # control = VehicleMPCController()
-#     nn = VehicleNeuralNetwork(file='twoobs-nost', device='cpu')
-#     st = VehicleStateTransformation()
-#     control = NeuralNetworkControl(nn)
-#     model = VehicleModel(control)
+    # st = VehicleStateTransformation()
+    if METHOD == 'nn':
+        nn = VehicleNeuralNetwork(file=NNFILE, device='cpu')
+        control = NeuralNetworkControl(nn)
+    elif METHOD == 'mpc':
+        control = VehicleMPCController()
+    model = VehicleModel(control)
 
-#     t_span = [0,model.u_step*problem_horizon]
+    t_span = [0,model.u_step*problem_horizon]
 
-#     X = gen_ics(XRANGE, YRANGE, PRANGE, VRANGE, NUM_ICS)
+    X = gen_ics(XRANGE, YRANGE, PRANGE, VRANGE, NUM_ICS)
 
-#     ind = 0
-#     X[ind,:] = np.array([7.5,7.5,-np.pi,2])
-#     # X[ind,:] = np.array([ 5.64985442, 11.58482758, -0.7477311 , -1.68895928]); ind+=1
-#     # X[ind,:] = np.array([-7.24177948,  9.12419163 ,-0.3415519 ,  4.44351421]); ind+=1
-#     # X[ind,:] = np.array([ 5.345843 ,   8.58482883 ,-1.04108991, -3.87954384]); ind+=1
-#     #[3.43104413 8.3884244  1.20541383 3.65459651]
-#     # X[ind,:] = np.array([ 8.85002768,  9.92996661 ,-2.31952152, 0.80199218]); ind+=1
-#     # X[ind,:] = np.array([ 12, 5, -1.57925116 , 0.44655594]); ind+=1
-#     # X[ind,:] = np.array([ 8.26461452, 10.07690833, -1.57925116 , 0.44655594]); ind+=1
-#     # X[ind,:] = np.array([ 5.2909565,  -8.05621893,  0.14837165, -2.62037427]); ind+=1
-#     # X[ind,:] = np.array([-10, 0, 0, 0]); ind+=1493
-#     for n, x0 in enumerate(X):
-#         print(f'IC: {x0}')
+    ind = 0
+    X[ind,:] = np.array([8,8,-2*np.pi/3,2])
+    # X[ind,:] = np.array([7.5,7.5,-np.pi,2])
+    # X[ind,:] = np.array([ 5.64985442, 11.58482758, -0.7477311 , -1.68895928]); ind+=1
+    # X[ind,:] = np.array([-7.24177948,  9.12419163 ,-0.3415519 ,  4.44351421]); ind+=1
+    # X[ind,:] = np.array([ 5.345843 ,   8.58482883 ,-1.04108991, -3.87954384]); ind+=1
+    #[3.43104413 8.3884244  1.20541383 3.65459651]
+    # X[ind,:] = np.array([ 8.85002768,  9.92996661 ,-2.31952152, 0.80199218]); ind+=1
+    # X[ind,:] = np.array([ 12, 5, -1.57925116 , 0.44655594]); ind+=1
+    # X[ind,:] = np.array([ 8.26461452, 10.07690833, -1.57925116 , 0.44655594]); ind+=1
+    # X[ind,:] = np.array([ 5.2909565,  -8.05621893,  0.14837165, -2.62037427]); ind+=1
+    # X[ind,:] = np.array([-10, 0, 0, 0]); ind+=1493
+    for n, x0 in enumerate(X):
+        print(f'IC: {x0}')
 
-#         fig, axs = plt.subplots(2,2,figsize=[8,8], dpi=100)
-#         fig.set_tight_layout(True)
-#         fig.suptitle("x0: " + np.array2string(x0))
+        # fig, axs = plt.subplots(2,2,figsize=[8,8], dpi=100)
+        fig, axs = plt.subplots(1,1,figsize=[3.5,4], dpi=100)
+        fig.set_tight_layout(True)
+        # fig.suptitle("x0: " + np.array2string(x0))
         
-#         before = time.time()
-#         traj = model.compute_trajectory(x0=x0, t_span=t_span, t_step=t_step)
-#         tt = traj['t']; xx = traj['x']; uu = traj['u']
-#         after = time.time()
-#         print(f'{after - before:.3f} seconds')
-#         plot_solution(fig, axs, tt, xx, uu)
+        before = time.time()
+        traj = model.compute_trajectory(x0=x0, t_span=t_span, t_step=t_step)
+        tt = traj['t']; xx = traj['x']; uu = traj['u']
+        after = time.time()
+        print(f'{after - before:.3f} seconds')
 
-#         plt.show()
+        fig.suptitle(f'{METHOD.upper()}: {after - before:.3f} seconds')
+
+        pxx, pyy, PP, VV = xx
+        # plot_solution(fig, axs, tt, xx, uu)
+        plot_Y_X (fig,axs,tt,pxx,pyy,xlim=[-1,9],ylim=[-1,9])
+        plt.savefig(f'figures/{METHOD}-vehicle.pdf')
+
+        plt.show()

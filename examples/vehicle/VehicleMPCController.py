@@ -74,7 +74,8 @@ class VehicleMPCController (ControlFunction) :
         self.opti.subject_to(self.opti.bounded(-20,self.uu[0,:],20))
         self.opti.subject_to(self.opti.bounded(-pi/3,self.uu[1,:],pi/3))
 
-        self.opti.solver('ipopt',{'print_time':0},{'linear_solver':'MA57', 'print_level':0, 'sb':'yes','max_iter':100000})
+        # self.opti.solver('ipopt',{'print_time':0},{'linear_solver':'MA57', 'print_level':0, 'sb':'yes','max_iter':100000})
+        self.opti.solver('ipopt',{'print_time':0},{'print_level':0, 'sb':'yes','max_iter':100000})
         # self.opti.solver('ipopt',{'print_time':0},{'print_level':0, 'sb':'yes','max_iter':100000})
         # self.opti.solver('ipopt',)
 

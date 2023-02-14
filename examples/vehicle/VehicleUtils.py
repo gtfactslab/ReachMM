@@ -71,8 +71,8 @@ def plot_XYPV_t (ax, tt, SS) :
     # ax.set_ylim([6,10])
 def plot_Y_X (fig, ax, tt, XX, YY, xlim=[-15,15], ylim=[-15,15], show_colorbar=False, show_obs=True) :
     if show_obs :
-        ax.add_patch(Circle((4,4),3/1.25,lw=0,fc='darkred'))
-        ax.add_patch(Circle((-4,4),3/1.25,lw=0,fc='darkred'))
+        ax.add_patch(Circle((4,4),3/1.25,lw=0,fc='salmon'))
+        ax.add_patch(Circle((-4,4),3/1.25,lw=0,fc='salmon'))
     # ax.add_patch(Rectangle((-1,-1),2,2,lw=0,fc='darkgreen'))
     # ax.add_patch(Circle((0,0),1,lw=0,fc='g'))
     # ax.add_patch(Ellipse((-3,0),2*1.8,2*2.8,lw=0,fc='r'))
