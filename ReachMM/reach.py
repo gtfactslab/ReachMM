@@ -63,7 +63,7 @@ class Partition :
 class ControlPartition (Partition):
     def __init__(self, x_xh=None, x_xh_t=None, u_uh_t=None, tt=None, integral_partitions=None):
         super().__init__(x_xh, x_xh_t, u_uh_t, tt)
-        self.integral_partitions = integral_partitions
+        self.integral_partitions = self.add_integral_partition(x_xh) if integral_partitions is None else integral_partitions
 
     def add_integral_partition (self, partition):
         if self.integral_partitions is None :
@@ -103,18 +103,6 @@ class ControlPartition (Partition):
             min_x = np.min(allx_xh[:,:len_x], axis=0)
             max_xh = np.max(allx_xh[:,len_x:], axis=0)
             return np.concatenate((min_x, max_xh))
-            # for idx,ip in enumerate(self.integral_partitions) :
-            #     len_x = len(ip.x_xh) // 2
-            #     if idx == 0 :
-            #         min_x, max_xh = np.copy(ip.x_xh[:len_x]), np.copy(ip.x_xh[len_x:])
-            #     else :
-            #         x, xh = ip.x_xh[:len_x], ip.x_xh[len_x:]
-            #         for j in range(len(x)) :
-            #             if x[j] < min_x[j] :
-            #                 min_x[j] = np.copy(x[j])
-            #             if xh[j] > max_xh[j] :
-            #                 max_xh[j] = np.copy(xh[j])
-            # return np.concatenate((min_x,max_xh))
 
     def get_bounding_box_t (self) :
         if self.integral_partitions is None :
