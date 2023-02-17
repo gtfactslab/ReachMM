@@ -49,7 +49,7 @@ class VehicleNeuralNetwork (nn.Module) :
         if file != None :
             loadpath = 'models/' + file + '.pt'
             print(f'Loading model from {loadpath}')
-            self.load_state_dict(torch.load(loadpath))
+            self.load_state_dict(torch.load(loadpath, map_location=device))
         self.device = device
         # self.dummy_input = torch.tensor([[0,0,0,0,0]], dtype=torch.float64).to(device)
         self.to(self.device)
