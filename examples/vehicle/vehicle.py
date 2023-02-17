@@ -127,7 +127,7 @@ plt.figure(fig); plt.savefig(f'figures/main_experiment.pdf')
 
 # ====== Partitioning Experiment ======
 if not args.no_partitioning :
-    experiments_part = [[(0,0), (1,0), (1,1), (2,0)]]
+    experiments_part = [[(1,0), (0,1), (1,1), (0,2)]]
     # experiments_part = [[(0,0), (0,1), (1,0)],\
     #                     [(0,2), (1,1), (2,0)]]
 

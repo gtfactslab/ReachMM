@@ -109,21 +109,38 @@ class MixedMonotoneModel :
 
         for i,section in enumerate(tqdm(tt_ustep, disable=(not enable_bar))) :
             # x_xh=rs.get_bounding_box(i)
-            rs_calc.add_control_partition(ControlPartition(x_xh=rs.get_bounding_box(i)),i)
-            rs_calc.create_partitions(control_divisions, integral_divisions, i)
 
-            for cp in (rs_calc.partitions_i[i] if repartition else rs.partitions_i[i]) :
-                tt = np.linspace(section,section+self.u_step,len_tt)
-                self.control_if.prime(cp.x_xh)
-                self.control_if.step(tt[0], cp.x_xh)
-                xx = self.integrate(cp.x_xh, tt, method=method)
-                newcp = ControlPartition(x_xh_t=xx[:,1:], tt=tt[1:])
-                if cp.integral_partitions is not None :
-                    for ip in cp.integral_partitions :
-                        self.control_if.step(tt[0],ip.x_xh)
-                        xx = self.integrate(ip.x_xh, tt, method=method)
-                        newcp.add_integral_partition(Partition(x_xh_t=xx[:,1:], tt=tt[1:]))
-                rs.add_control_partition(newcp,i+1)
+            if repartition :
+                rs_calc.add_control_partition(ControlPartition(x_xh=rs.get_bounding_box(i)),i)
+                rs_calc.create_partitions(control_divisions, integral_divisions, i)
+                for cp in (rs_calc.partitions_i[i]) :
+                    tt = np.linspace(section,section+self.u_step,len_tt)
+                    self.control_if.prime(cp.x_xh)
+                    self.control_if.step(tt[0], cp.x_xh)
+                    xx = self.integrate(cp.x_xh, tt, method=method)
+                    newcp = ControlPartition(x_xh_t=xx[:,1:], tt=tt[1:])
+                    if cp.integral_partitions is not None :
+                        for ip in cp.integral_partitions :
+                            self.control_if.step(tt[0],ip.x_xh)
+                            xx = self.integrate(ip.x_xh, tt, method=method)
+                            newcp.add_integral_partition(Partition(x_xh_t=xx[:,1:], tt=tt[1:]))
+                    rs.add_control_partition(newcp,i+1)
+            else :
+                for cp in (rs.partitions_i[i]) :
+                    tt = np.linspace(section,section+self.u_step,len_tt)
+                    self.control_if.prime(cp.x_xh)
+                    self.control_if.step(tt[0], cp.x_xh)
+                    xx = self.integrate(cp.x_xh, tt, method=method)
+                    newcp = ControlPartition(x_xh_t=xx[:,1:], tt=tt[1:])
+                    if cp.integral_partitions is not None :
+                        for ip in cp.integral_partitions :
+                            self.control_if.step(tt[0],ip.x_xh)
+                            xx = self.integrate(ip.x_xh, tt, method=method)
+                            newcp.add_integral_partition(Partition(x_xh_t=xx[:,1:], tt=tt[1:]))
+                        newcp.x_xh = newcp.get_bounding_box()
+                        newcp.x_xh_t = newcp.get_bounding_box_t()
+                    rs.add_control_partition(newcp,i+1)
+
         return rs
 
     def integrate (self, x0, t_eval, method='RK45') :
