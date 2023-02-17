@@ -8,6 +8,7 @@ import time
 from tqdm import tqdm
 from tabulate import tabulate
 from ReachMM.utils import run_time
+from scipy.integrate import solve_ivp
 
 device = 'cpu'
 
@@ -25,6 +26,10 @@ t_span = [0,1.25]
 
 x0d = np.concatenate((x0 - eps,x0 + eps))
 
-rs, runtime = run_time(model.compute_reachable_set, x0d, t_span, 0, 0, enable_bar=True)
+dtraj, runtime = run_time(model.compute_trajectory, x0d, t_span, 0.01, embed=True, enable_bar=False)
+dtt = dtraj['t']; dxx = dtraj['x']; duu = dtraj['u']
+print(f"One Embedded Trajectory Time: {runtime}")
+
+rs, runtime = run_time(model.compute_reachable_set, x0d, t_span, 0, 1, enable_bar=False)
 print(runtime)
-print(rs.sol(1))
+print(rs(1.25))
