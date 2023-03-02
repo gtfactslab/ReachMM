@@ -105,7 +105,7 @@ if __name__ == '__main__' :
     X = gen_ics(XRANGE, YRANGE, PRANGE, VRANGE, NUM_ICS)
 
     ind = 0
-    X[ind,:] = np.array([8,8,-2*np.pi/3,2])
+    X[ind,:] = np.array([8,8,-np.pi/4,2])
     # X[ind,:] = np.array([7.5,7.5,-np.pi,2])
     # X[ind,:] = np.array([ 5.64985442, 11.58482758, -0.7477311 , -1.68895928]); ind+=1
     # X[ind,:] = np.array([-7.24177948,  9.12419163 ,-0.3415519 ,  4.44351421]); ind+=1

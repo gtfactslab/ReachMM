@@ -3,7 +3,7 @@ from scipy.integrate import solve_ivp
 from tqdm import tqdm
 from time import time
 from torch.multiprocessing import Pool
-from ReachMM.reach import Partition
+from ReachMM.reach import Trajectory, Partition, width
 
 class MixedMonotoneModel :
     def __init__ (self, control=None, control_if=None, u_step=0.1) :
@@ -53,22 +53,15 @@ class MixedMonotoneModel :
             S[i,:] = self.f(x,u) - f0
         return S
     
-    # def compute_trajectory (self, x0, t_span, method='RK45', t_step=None, enable_bar=True) :
-    #     self.embed = False
-    #     if t_step is None and method == 'euler' :
-    #         Exception(f'Calling {method} method without t_step')
-    #     elif t_step is not None and method != 'euler' :
-    #         Exception(f'Calling {method} method with t_step')
+    def compute_trajectory (self, x0, t_span, method='RK45', t_step=None, enable_bar=True) :
+        self.embed = False
         
-    #     sol = None
-    #     for t0 in tqdm(np.arange(t_span[0],t_span[1],self.u_step), disable=(not enable_bar)) :
-    #         if method == 'euler':
-    #             if sol is None :
-    #                 sol = [self.x_xh0]
-    #             for n in range(int(t_span[0]/self.t_step),int(t_span[1]/self.t_step)):
-    #                 self.sol.append(self.sol[n] + self.t_step*self.func(n*self.t_step, self.sol[n]))
-    #         else :
+        traj = Trajectory(x0,self.func_,self.control,t_step=t_step)
+        for t0 in tqdm(np.arange(t_span[0],t_span[1],self.u_step), disable=(not enable_bar)) :
+            # print(f'traj.integrate([{t0}, {t0+self.u_step}])')
+            traj.integrate([t0, t0+self.u_step], method)
 
+        return traj
 
     def compute_reachable_set (self, x_xh0, t_span, control_divisions=0, integral_divisions=0, method='RK45', t_step=None, enable_bar=True) :
         self.embed = True
@@ -81,6 +74,20 @@ class MixedMonotoneModel :
         for t0 in tqdm(np.arange(t_span[0],t_span[1],self.u_step), disable=(not enable_bar)) :
             rs.integrate([t0, t0+self.u_step], method)
         
+        return rs
+
+    def compute_reachable_set_eps (self, x_xh0, t_span, control_divisions=0, integral_divisions=0, method='RK45', t_step=None, eps=1, max_primer_depth=1, max_depth=2, check_contr=0.5, enable_bar=True) -> Partition :
+        print(f"compute_reachable_set_eps: cd={control_divisions}, id={integral_divisions}, eps={eps}, max_primer_depth={max_primer_depth}, max_depth={max_depth}")
+        self.embed = True
+        rs = Partition(x_xh0,self.func_,self.control_if,True,t_step=t_step)
+        for i in range(control_divisions) :
+            rs.cut_all(True)
+        for i in range(integral_divisions) :
+            rs.cut_all(False)
+
+        for t0 in tqdm(np.arange(t_span[0],t_span[1],self.u_step), disable=(not enable_bar)) :
+            rs.integrate_eps([t0, t0+self.u_step], method, eps, max_primer_depth, max_depth, check_contr)
+
         return rs
 
     def integrate (self, x0, t_eval, method='RK45') :
@@ -96,3 +103,4 @@ class MixedMonotoneModel :
             t_span = [t_eval[0], t_eval[-1]]
             sol = solve_ivp(self.func_, t_span, x0, method, t_eval)
             return sol.y
+    
