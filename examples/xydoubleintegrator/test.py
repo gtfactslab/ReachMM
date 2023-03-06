@@ -5,6 +5,7 @@ from matplotlib.patches import Circle
 from matplotlib.collections import LineCollection
 from ReachMM import NeuralNetwork, NeuralNetworkControl
 from ReachMM.utils import gen_ics
+from ReachMM import DisturbanceFunction, DisturbanceInclusionFunction
 
 # control = XYDoubleIntegratorMPC()
 net = NeuralNetwork('models/100r100r2')

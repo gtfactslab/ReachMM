@@ -1,16 +1,31 @@
 from ReachMM import MixedMonotoneModel, ControlFunction
+from ReachMM import NoDisturbance, NoDisturbanceIF
+from ReachMM.decomp import d_b1b2
 import numpy as np
 from casadi import *
 
+weps = 0.1
+
 class XYDoubleIntegratorModel (MixedMonotoneModel) :
-    def __init__(self, control=None, control_if=None, u_step=0.25):
-        super().__init__(control, control_if, u_step)
+    def __init__(self, control=None, control_if=None, u_step=0.25, disturbance=NoDisturbance(1), disturbance_if=NoDisturbanceIF(1)):
+        super().__init__(control, control_if, u_step, disturbance, disturbance_if)
 
-    def f(self, x, u) :
-        return np.array([x[2],x[3],u[0],u[1]])
+    def f(self, x, u, w) :
+        return np.array([x[2],x[3],(1 + w[0])*u[0],(1 + w[0])*u[1]])
 
-    def d(self, x, u) :
-        return np.array([x[2],x[3],u[0],u[1]])
+    def d(self, x, xh, u, uh, w, wh) :
+        u0 = (1 + w[0])*u[0] if u[0] >= 0 else (1 + wh[0])*u[0]
+        u1 = (1 + w[0])*u[1] if u[1] >= 0 else (1 + wh[0])*u[1]
+        return np.array([x[2],x[3], u0, u1])
+
+    def d_i (self, i, x, xh, u, uh, w, wh) :
+        if i == 0 :
+            return x[2]
+        if i == 1 :
+            return x[3]
+        if i == 2 : 
+            return (1 + w[0])*u[0] if u[0] >= 0 else (1 + wh[0])*u[0]
+        return (1 + w[0])*u[1] if u[1] >= 0 else (1 + wh[0])*u[1]
 
 class XYDoubleIntegratorMPC (ControlFunction):
     def __init__(self, n_horizon=20, u_step=2.5e-1, euler_steps=10):
