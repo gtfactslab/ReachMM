@@ -6,10 +6,20 @@ from matplotlib.collections import LineCollection
 from ReachMM import NeuralNetwork, NeuralNetworkControl
 from ReachMM.utils import gen_ics
 from ReachMM import DisturbanceFunction, DisturbanceInclusionFunction
+from ReachMM import LinearControl, LinearControlIF
+from control import lqr
+
+A = np.array([ [0,0,1,0], [0,0,0,1], [0,0,0,0], [0,0,0,0]])
+B = np.array([ [0,0], [0,0], [1,0], [0,1] ])
+Q = np.array([ [1,0,0,0], [0,1,0,0], [0,0,0,0], [0,0,0,0] ])
+R = np.array([ [0.5,0], [0,0.5] ])
+
+K, S, E = lqr(A, B, Q, R)
 
 # control = XYDoubleIntegratorMPC()
 net = NeuralNetwork('models/100r100r2')
 control = NeuralNetworkControl(net)
+# control = LinearControl(-K)
 model = XYDoubleIntegratorModel(control)
 
 t_end = 20*0.25

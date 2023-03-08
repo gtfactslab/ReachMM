@@ -12,6 +12,7 @@ from ReachMM import ControlFunction, ControlInclusionFunction
 from ReachMM import DisturbanceFunction, DisturbanceInclusionFunction
 from ReachMM import NoDisturbance, NoDisturbanceIF
 from ReachMM.utils import run_time
+from ReachMM.decomp import d_positive
 
 def width (x_xh:ArrayLike, scale=None) :
     n = len(x_xh) // 2
@@ -23,6 +24,7 @@ def sg_box (x_xh:ArrayLike, xi=0,yi=1):
     Xl, Yl, Xu, Yu = \
         x_xh[xi],   x_xh[yi], \
         x_xh[xi+n], x_xh[yi+n]
+    # print(Xl,Yl,Xu,Yu)
     return sg.box(Xl,Yl,Xu,Yu)
 
 class Trajectory :
@@ -37,8 +39,8 @@ class Trajectory :
         self.n0 = 0
 
     def get_sol(self, n) :
-        # print(n, self.n0)
-        # print(len(self.sol), self.depth, self.subpartitions)
+        # print(n, self.n0, len(self.sol))
+        # print(len(self.sol))
         return self.sol[n - self.n0]
     def t_max (self) :
         if self.sol is None :
@@ -62,7 +64,10 @@ class Trajectory :
         if method == 'euler' :
             if self.sol is None:
                 self.sol = [self.x0]
-            for n in range(int(t_span[0]/self.t_step),int(t_span[1]/self.t_step)):
+            # print(t_span[0]/self.t_step, t_span[1]/self.t_step)
+            # print(round(t_span[0]/self.t_step),round(t_span[1]/self.t_step))
+            for n in range(round(t_span[0]/self.t_step),round(t_span[1]/self.t_step)):
+                # print(n)
                 self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
 
         else :
@@ -79,6 +84,7 @@ class Trajectory :
             if self.t_step is None and t <= self.t_max() :
                 return self.sol(t)
             elif self.t_step is not None and t < len(self.sol) :
+                # print(t,self.t_step)
                 return self.get_sol(int(t/self.t_step))
         
         return self.x0
@@ -145,7 +151,7 @@ class Partition :
             if method == 'euler' :
                 if self.sol is None:
                     self.sol = [self.x_xh0]
-                for n in range(int(t_span[0]/self.t_step),int(t_span[1]/self.t_step)):
+                for n in range(round(t_span[0]/self.t_step),round(t_span[1]/self.t_step)):
                     self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
 
             else :
@@ -179,12 +185,12 @@ class Partition :
                 if self.sol is None:
                     self.sol = [self.x_xh0]
                 
-                n0 = int(t_span[0]/self.t_step)
-                nf = int(t_span[1]/self.t_step)
+                n0 = round(t_span[0]/self.t_step)
+                nf = round(t_span[1]/self.t_step)
                 for n in range(n0,nf):
                     self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
                     
-                    if self.depth < max_depth and n == int(n0 + check_contr*(nf-n0)) :
+                    if self.depth < max_depth and n > n0 + check_contr*(nf-n0) :
                         wt0 = width(self.get_sol(n), eps); mwt0 = np.max(wt0)
                         wtm = width(self.sol[-1], eps); mwtm = np.max(wtm)
                         C = mwtm / mwt0
@@ -243,30 +249,39 @@ class Partition :
             for part in self.subpartitions :
                 part.cut_all(primer,cut_dist,n0)
     
-    def sg_boxes (self, t, xi=0, yi=1) :
+    def sg_boxes (self, t, xi=0, yi=1, T=None) :
         if self.sol is not None:
             if self.t_step is None and t <= self.t_max() :
-                return [sg_box(self.sol(t))]
+                bb = self.sol(t)
+                if T is not None :
+                    bb = d_positive(T) @ bb
+                return [sg_box(bb,xi,yi)]
             elif self.t_step is not None and t < self.t_max() :
-                return [sg_box(self.get_sol(int(t/self.t_step)))]
+                bb = self.get_sol(round(t/self.t_step))
+                if T is not None :
+                    bb = d_positive(T) @ bb
+                return [sg_box(bb,xi,yi)]
 
         if self.subpartitions is not None :
             boxes = []
             for subpart in self.subpartitions :
-                boxes.extend(subpart.sg_boxes(t,xi,yi))
+                boxes.extend(subpart.sg_boxes(t,xi,yi,T))
             return boxes
         
         return self.x_xh0
     
-    def draw_sg_boxes (self, ax, tt, xi=0, yi=1, color='tab:blue') :
+    def draw_sg_boxes (self, ax, tt, xi=0, yi=1, color='tab:blue', T=None) :
         tt = np.asarray(tt)
         
         for t in tt :
-            boxes = self.sg_boxes(t, xi, yi)
+            boxes = self.sg_boxes(t, xi, yi, T)
             shape = so.unary_union(boxes)
             xs, ys = shape.exterior.xy    
             ax.fill(xs, ys, alpha=0.75, fc='none', ec=color)
-            xsb, ysb = sg_box(self(t)).exterior.xy
+            bb = self(t)
+            if T is not None:
+                bb = d_positive(T) @ bb
+            xsb, ysb = sg_box(bb,xi,yi).exterior.xy
             ax.fill(xsb, ysb, alpha=0.5, fc='none', ec=color, linestyle='--')
     
     def width(self, scale=None):
@@ -277,7 +292,7 @@ class Partition :
             if self.t_step is None and t <= self.t_max() :
                 return self.sol(t)
             elif self.t_step is not None and t <= self.t_max() :
-                return self.get_sol(int(t/self.t_step))
+                return self.get_sol(round(t/self.t_step))
 
         if self.subpartitions is not None :
             x_xht2_parts = np.array([subpart(t) 

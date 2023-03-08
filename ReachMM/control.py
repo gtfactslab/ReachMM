@@ -1,4 +1,5 @@
 import numpy as np
+from ReachMM.decomp import d_positive
 
 # ControlFunction implements a piecewise constant controller.
 class ControlFunction :
@@ -64,6 +65,47 @@ class ControlInclusionFunction :
 
     def __call__(self, t, x) : 
         return self.step(t,x)
+
+class LinearControl (ControlFunction) :
+    def __init__(self, K):
+        super().__init__(K.shape[0])
+        self.K = K
+    def u (self, t, x) :
+        return self.K @ x
+
+class LinearControlIF (ControlInclusionFunction) :
+    def __init__(self, K, mode='hybrid'):
+        super().__init__(K.shape[0], mode)
+        self.K = K
+        self.Kp, self.Kn = d_positive(K, separate=True)
+
+    def u(self, t, x_xh) :
+        n = len(x_xh) // 2
+        x = x_xh[:n]; xh = x_xh[n:]
+        return self.Kp @ x + self.Kn @ xh
+    
+    def uh (self, t, x_xh) :
+        n = len(x_xh) // 2
+        x = x_xh[:n]; xh = x_xh[n:]
+        return self.Kp @ xh + self.Kn @ x
+    
+    def u_i (self, i, t, x_xh, swap_x) :
+        h = len(x_xh) // 2
+        x = np.copy(x_xh[:h]); xh = np.copy(x_xh[h:])
+        if swap_x :
+            x[i] = xh[i]
+        else :
+            xh[i] = x[i]
+        return self.Kp @ x + self.Kn @ xh
+
+    def uh_i (self, i, t, x_xh, swap_x) :
+        h = len(x_xh) // 2
+        x = np.copy(x_xh[:h]); xh = np.copy(x_xh[h:])
+        if swap_x :
+            x[i] = xh[i]
+        else :
+            xh[i] = x[i]
+        return self.Kp @ xh + self.Kn @ x
 
 class DisturbanceFunction :
     def __init__(self, w_len) :
