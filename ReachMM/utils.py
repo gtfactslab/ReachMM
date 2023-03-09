@@ -22,6 +22,13 @@ def gen_ics(RANGES, N) :
         X[:,i] = uniform_disjoint(range, N)
     return X
 
+def gen_ics_pert (x0, pert, N) :
+    X = np.empty((N, len(x0)))
+    for i in range(len(x0)) :
+        # X[:,i] = uniform_disjoint(range, N)
+        X[:,i] = np.random.uniform(x0[i]-pert[i], x0[i]+pert[i], N)
+    return X
+
 def file_to_numpy (filenames) :
     with open('data/' + filenames[0] + '.npy', 'rb') as f :
         nploaded = np.load(f)

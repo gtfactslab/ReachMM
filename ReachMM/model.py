@@ -7,13 +7,20 @@ from ReachMM.reach import Trajectory, Partition, width
 from ReachMM import ControlFunction, ControlInclusionFunction
 from ReachMM import DisturbanceFunction, DisturbanceInclusionFunction
 from ReachMM import NoDisturbance, NoDisturbanceIF
+from ReachMM.decomp import d_positive, d_metzler
 
 class MixedMonotoneModel :
-    def __init__ (self, control:ControlFunction=None, control_if:ControlInclusionFunction=None, u_step=0.1,
-                        disturbance:DisturbanceFunction=NoDisturbance(), disturbance_if:DisturbanceInclusionFunction=NoDisturbanceIF()) :
+    def __init__ (self, control:ControlFunction=None, control_if:ControlInclusionFunction=None, u_step=None,
+                        disturbance:DisturbanceFunction=None, disturbance_if:DisturbanceInclusionFunction=None) :
 
-        if control == None and control_if == None :
+        if control is None and control_if is None :
             Exception("Need to define 'control' or 'control_if'")
+        if u_step is None :
+            Exception("Need to define u_step")
+        if disturbance is None :
+            disturbance = NoDisturbance()
+        if disturbance_if is None :
+            disturbance_if = NoDisturbanceIF()
 
         self.control = control
         self.control_if = control_if
@@ -22,6 +29,7 @@ class MixedMonotoneModel :
         self.u_step = u_step
         self.embed = None
         self.sum_func = 0
+
 
     # Abstract Method for embedding system
     def f  (self, x, u, w=None) : 
@@ -40,7 +48,7 @@ class MixedMonotoneModel :
         else :
             dim = len(xt) // 2
             x  = xt[:dim]; xh = xt[dim:]
-            if self.control_if.mode == 'global' :
+            if self.control_if.mode == 'global':
                 w  = self.disturbance_if.w (t,xt)
                 wh = self.disturbance_if.wh(t,xt)
                 xdot  = self.d(x, xh,\
@@ -65,6 +73,9 @@ class MixedMonotoneModel :
                                   self.disturbance_if.w_i (i,t,xt,True)) \
                                     for i in range(dim)]
                 self.sum_func += 1
+            elif self.control_if.mode == 'disclti' :
+                xdot  = self.control_if._Mm @ x + self.control_if._Mn @ xh + self.control_if.Bp @ self.control_if._d.reshape(-1) + self.control_if.Bn @ self.control_if.d_.reshape(-1)
+                xhdot = self.control_if.M_m @ xh + self.control_if.M_n @ x + self.control_if.Bn @ self.control_if._d.reshape(-1) + self.control_if.Bp @ self.control_if.d_.reshape(-1)
             return np.concatenate((xdot,xhdot))
     
     def S (self, x0, x1) :

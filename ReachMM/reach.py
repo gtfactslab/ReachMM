@@ -13,6 +13,8 @@ from ReachMM import DisturbanceFunction, DisturbanceInclusionFunction
 from ReachMM import NoDisturbance, NoDisturbanceIF
 from ReachMM.utils import run_time
 from ReachMM.decomp import d_positive
+import sys
+from traceback import print_tb
 
 def width (x_xh:ArrayLike, scale=None) :
     n = len(x_xh) // 2
@@ -118,20 +120,34 @@ class Partition :
         self.n0 = n0
     
     def get_sol(self, n) :
-        # print(n, self.n0)
-        # print(len(self.sol), self.depth, self.subpartitions)
-        return self.sol[n - self.n0]
+        try :
+            return self.sol[n - self.n0]
+        except Exception as e :
+            print(n, self.n0)
+            print(len(self.sol), self.depth, self.subpartitions)
+            print(self.sol)
+            a
+            # print_tb(e.__traceback__)
+            sys.exit(1)
+
 
     def growth_event (self, t, x_xht) :
         return 1
     
+    def t_min (self) :
+        if self.sol is None :
+            return -1
+        elif self.t_step is None :
+            return self.sol.t_min
+        else :
+            return self.n0 * self.t_step
     def t_max (self) :
         if self.sol is None :
             return -1
         elif self.t_step is None :
             return self.sol.t_max
         else :
-            return (len(self.sol) + self.n0) * self.t_step
+            return (len(self.sol) - 1 + self.n0) * self.t_step
     
     def integrate (self, t_span, method='RK45') :
         if self.t_step is None and method == 'euler' :
@@ -187,21 +203,29 @@ class Partition :
                 
                 n0 = round(t_span[0]/self.t_step)
                 nf = round(t_span[1]/self.t_step)
+                olen = len(self.sol)
                 for n in range(n0,nf):
-                    self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
+                    if self.control_if.mode == 'disclti' :
+                        self.sol.append(self.model.func_(n*self.t_step, self.get_sol(n)))
+                    else :
+                        self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
+
                     
-                    if self.depth < max_depth and n > n0 + check_contr*(nf-n0) :
+                    if self.depth < max_depth and n >= n0 + round(check_contr*(nf-n0)) :
                         wt0 = width(self.get_sol(n), eps); mwt0 = np.max(wt0)
                         wtm = width(self.sol[-1], eps); mwtm = np.max(wtm)
                         C = mwtm / mwt0
-                        mwtf = (C**((nf-n)/(n-n0))) * mwtm
+                        mwtf = (C**((nf-(n+1))/((n+1)-n0))) * mwtm
                         if mwtf > 1 :
+                            # print(mwtf, mwtm, mwt0)
+                            # print(f'cutting from depth {self.depth}')
                             # print(C,mwtf, nf,n)
-                            self.sol = self.sol[:(n0+1 - self.n0)]
+                            # self.sol = self.sol[:(n0+1 - self.n0)]
+                            self.sol = self.sol[:olen]
                             # print(len(self.sol))
                             self.cut_all((self.primer_depth < max_primer_depth), cut_dist, n0)
                             
-                            self.integrate_eps(t_span,method,eps,max_depth,check_contr)
+                            self.integrate_eps(t_span,method,eps,max_primer_depth,max_depth,check_contr,cut_dist)
                             return
 
             else :
@@ -214,7 +238,7 @@ class Partition :
                                         (self.sol.interpolants + ret.sol.interpolants))
         else :
             for subpart in self.subpartitions :
-                subpart.integrate_eps(t_span, method, eps, max_primer_depth, max_depth, check_contr)
+                subpart.integrate_eps(t_span, method, eps, max_primer_depth, max_depth, check_contr, cut_dist)
     
     def cut (self, i, primer:bool = False) :
         if self.subpartitions is None :
@@ -270,7 +294,7 @@ class Partition :
         
         return self.x_xh0
     
-    def draw_sg_boxes (self, ax, tt, xi=0, yi=1, color='tab:blue', T=None) :
+    def draw_sg_boxes (self, ax, tt, xi=0, yi=1, color='tab:blue', T=None, draw_bb=False) :
         tt = np.asarray(tt)
         
         for t in tt :
@@ -278,45 +302,76 @@ class Partition :
             shape = so.unary_union(boxes)
             xs, ys = shape.exterior.xy    
             ax.fill(xs, ys, alpha=0.75, fc='none', ec=color)
-            bb = self(t)
-            if T is not None:
-                bb = d_positive(T) @ bb
-            xsb, ysb = sg_box(bb,xi,yi).exterior.xy
-            ax.fill(xsb, ysb, alpha=0.5, fc='none', ec=color, linestyle='--')
+            if draw_bb:
+                bb = self(t)
+                if T is not None:
+                    bb = d_positive(T) @ bb
+                xsb, ysb = sg_box(bb,xi,yi).exterior.xy
+                ax.fill(xsb, ysb, alpha=0.5, fc='none', ec=color, linestyle='--')
     
     def width(self, scale=None):
         return width(self.interpolants[-1], scale)
 
     def _call_single(self, t):
-        if self.sol is not None:
-            if self.t_step is None and t <= self.t_max() :
-                return self.sol(t)
-            elif self.t_step is not None and t <= self.t_max() :
-                return self.get_sol(round(t/self.t_step))
-
-        if self.subpartitions is not None :
-            x_xht2_parts = np.array([subpart(t) 
-                                    for subpart in self.subpartitions])
-            # n = x_xht2_parts.shape[1] // 2
-            xt2_min  = np.min(x_xht2_parts[:,:self.n], axis=0)
-            xht2_max = np.max(x_xht2_parts[:,self.n:], axis=0)
-            return np.concatenate((xt2_min,xht2_max))
+        # if self.subpartitions is not None :
+        #     x_xht2_parts = np.array([subpart(t) 
+        #                             for subpart in self.subpartitions])
+        #     # n = x_xht2_parts.shape[1] // 2
+        #     xt2_min  = np.min(x_xht2_parts[:,:self.n], axis=0)
+        #     xht2_max = np.max(x_xht2_parts[:,self.n:], axis=0)
+        #     return np.concatenate((xt2_min,xht2_max))
         
+        # if self.sol is not None:
+        #     if self.t_step is None and t <= self.t_max() :
+        #         return self.sol(t)
+        #     elif self.t_step is not None and t <= self.t_max() :
+        #         return self.get_sol(round(t/self.t_step))
+
+        if self.sol is not None and t <= self.t_max() :
+            return self.sol(t) if self.t_step is None \
+                    else self.get_sol(round(t/self.t_step))
+        elif self.subpartitions is not None :
+            x_xht_parts = np.array([subpart(t) for subpart in self.subpartitions])
+            n = x_xht_parts.shape[1] // 2
+            xt2_min  = np.min(x_xht_parts[:,:n], axis=0)
+            xht2_max = np.max(x_xht_parts[:,n:], axis=0)
+            x_xht = np.concatenate((xt2_min,xht2_max))
+            return x_xht
+
         return self.x_xh0
+    
+    def get_max_depth (self, t=None) :
+        if self.subpartitions is None :
+            if t is None or t >= self.t_min() :
+                return self.depth 
+            else :
+                return -1
+        else :
+            depths = [p.get_max_depth(t) for p in self.subpartitions]
+            depths.append(self.depth)
+            return max(depths)
+    
+    def get_max_primer_depth(self) :
+        if self.subpartitions is None :
+            return self.primer_depth
+        else :
+            return max([p.get_max_primer_depth() for p in self.subpartitions])
+
 
     def __call__ (self, t) :
         t = np.asarray(t)
         if t.ndim == 0:
             return self._call_single(t)
+            # return self([t])[0]
 
         if self.subpartitions is None :
             return self.sol(t) if self.t_step is None \
-                    else np.asarray(self.sol)[(t/self.t_step).astype(int) - self.n0].T
+                    else np.asarray(self.sol)[np.round(t/self.t_step).astype(int) - self.n0].T
         else :
             # print(t[t < int(self.t_max()/self.t_step)])
             if self.sol is not None:
                 x_xht1 = self.sol(t[t <= self.t_max()]) if self.t_step is None  \
-                        else np.asarray(self.sol)[(t[t <= self.t_max()]/self.t_step).astype(int) - self.n0].T
+                        else np.asarray(self.sol)[np.round(t[t <= self.t_max()]/self.t_step).astype(int) - self.n0].T
             else :
                 x_xht1 = None
             x_xht2_parts = np.array([subpart(t[t > self.t_max()]) 
