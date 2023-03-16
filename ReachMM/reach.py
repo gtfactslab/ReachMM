@@ -15,6 +15,8 @@ from ReachMM.utils import run_time
 from ReachMM.decomp import d_positive
 import sys
 from traceback import print_tb
+import networkx as nx
+from itertools import chain
 
 def width (x_xh:ArrayLike, scale=None) :
     n = len(x_xh) // 2
@@ -100,6 +102,8 @@ class Trajectory :
                 else np.asarray(self.sol)[(t/self.t_step).astype(int)].T
 
 class Partition :
+    _id = 0
+
     def __init__(self, x_xh0:ArrayLike, model,
                  control_if:ControlInclusionFunction, primer:bool, 
                  disturbance_if:DisturbanceInclusionFunction,
@@ -118,6 +122,8 @@ class Partition :
         self.depth = depth
         self.primer_depth = primer_depth
         self.n0 = n0
+        self._id = Partition._id
+        Partition._id += 1
     
     def get_sol(self, n) :
         try :
@@ -311,6 +317,7 @@ class Partition :
                     bb = d_positive(T) @ bb
                 xsb, ysb = sg_box(bb,xi,yi).exterior.xy
                 ax.fill(xsb, ysb, alpha=0.5, fc='none', ec=color, linestyle='--')
+
     
     def width(self, scale=None):
         return width(self.interpolants[-1], scale)
@@ -359,7 +366,24 @@ class Partition :
             return self.primer_depth
         else :
             return max([p.get_max_primer_depth() for p in self.subpartitions])
+    
+    def get_tree (self) :
+        if self.subpartitions is None :
+            return None
+        else :
+            edges = [(self._id, s._id) for s in self.subpartitions]
+            edges.extend(chain.from_iterable([y for s in self.subpartitions if (y := s.get_tree()) is not None]))
+            return edges
 
+    def draw_tree (self, ax, prog="twopi", args="") :
+        # print(self.get_tree())
+        G = nx.Graph()
+        tree = self.get_tree()
+        if tree is not None: 
+            G.add_edges_from(tree)
+            root = min([a for (a,b) in tree])
+            pos = nx.nx_agraph.graphviz_layout(G, prog=prog, root=root, args=args)
+            nx.draw(G, pos, ax, node_size=20, with_labels=False)
 
     def __call__ (self, t) :
         t = np.asarray(t)

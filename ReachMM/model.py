@@ -114,7 +114,7 @@ class MixedMonotoneModel :
         
         return rs
 
-    def compute_reachable_set_eps (self, x_xh0, t_span, control_divisions=0, integral_divisions=0, method='RK45', t_step=None, eps=1, max_primer_depth=1, max_depth=2, check_contr=0.5, cut_dist=False, enable_bar=True) -> Partition :
+    def compute_reachable_set_eps (self, x_xh0, t_span, control_divisions=0, integral_divisions=0, method='RK45', t_step=None, eps=1, max_primer_depth=1, max_depth=2, check_contr=0.5, cut_dist=False, enable_bar=True, axs=None) -> Partition :
         print(f"compute_reachable_set_eps: cd={control_divisions}, id={integral_divisions}, eps={eps}, max_primer_depth={max_primer_depth}, max_depth={max_depth}")
         self.embed = True
         rs = Partition(x_xh0,self,self.control_if,True,
@@ -124,8 +124,11 @@ class MixedMonotoneModel :
         for i in range(integral_divisions) :
             rs.cut_all(False,cut_dist)
 
-        for t0 in tqdm(np.arange(t_span[0],t_span[1],self.u_step), disable=(not enable_bar)) :
+        for i, t0 in enumerate(tqdm(np.arange(t_span[0],t_span[1],self.u_step), disable=(not enable_bar))) :
             rs.integrate_eps([t0, t0+self.u_step], method, eps, max_primer_depth, max_depth, check_contr, cut_dist)
+            if axs is not None :
+                axs[i].clear()
+                rs.draw_tree(axs[i],prog='dot')
 
         return rs
 

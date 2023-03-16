@@ -1,13 +1,14 @@
-# importing networkx
 import networkx as nx
-# importing matplotlib.pyplot
 import matplotlib.pyplot as plt
-import pydot
-from networkx.drawing.nx_pydot import graphviz_layout
 import itertools
 
-G = nx.balanced_tree(4, 3)
-pos = nx.nx_agraph.graphviz_layout(G, prog="circo", args="")
+# G = nx.balanced_tree(4, 3)
+G = nx.Graph()
+G.add_edges_from(
+    # [(1,2),(2,3),(3,4),(2,5),(5,6),(6,7)]
+    [(1,2),(2,3),(2,4),(1,5),(5,6),(5,7)]
+)
+pos = nx.nx_agraph.graphviz_layout(G, prog="twopi", args="")
 plt.figure(figsize=(8, 8))
 nx.draw(G, pos, node_size=20, alpha=0.5, node_color="blue", with_labels=False)
 plt.axis("equal")
