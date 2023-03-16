@@ -38,7 +38,7 @@ print(runtime)
 print(rs(6))
 
 # eps, max_primer_depth, max_depth, cd, id, check_cont, dist, cut_dist
-experiments = (((0,0,0,0,0,0.5,0,False), (  0,0,0,2,0,0.5,0,False), (  1,0,0,2,2,0.5,0,False), (   0,0,0,3,2,0.5,0,False)),
+experiments = (((0,0,0,0,0,0.5,0,False), (  0,0,0,4,0,0.5,0,False), (  1,0,0,2,2,0.5,0,False), (   0,0,0,3,2,0.5,0,False)),
                ((0.1,1,3,0,0,0,0,False), (0.1,2,4,0,0,0,0,False), (0.1,2,10,0,0,0,0,False), (0.07,2,10,0,0,0,0,False)))
 
 fig, axs = plt.subplots(2,4,dpi=100,figsize=[14,8],squeeze=False)

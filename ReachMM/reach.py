@@ -223,6 +223,9 @@ class Partition :
                             # self.sol = self.sol[:(n0+1 - self.n0)]
                             self.sol = self.sol[:olen]
                             # print(len(self.sol))
+                            sub_primer = self.primer_depth < max_primer_depth
+                            if sub_primer and self.primer :
+                                self.primer = False
                             self.cut_all((self.primer_depth < max_primer_depth), cut_dist, n0)
                             
                             self.integrate_eps(t_span,method,eps,max_primer_depth,max_depth,check_contr,cut_dist)
