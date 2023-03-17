@@ -99,7 +99,7 @@ class MixedMonotoneModel :
 
         return traj
 
-    def compute_reachable_set (self, x_xh0, t_span, control_divisions=0, integral_divisions=0, method='RK45', t_step=None, enable_bar=True) :
+    def compute_reachable_set (self, x_xh0, t_span, control_divisions=0, integral_divisions=0, method='RK45', t_step=None, repartition=False, enable_bar=True) :
         self.embed = True
         rs = Partition(x_xh0,self,self.control_if,True,
                        self.disturbance_if, t_step=t_step)
@@ -109,12 +109,19 @@ class MixedMonotoneModel :
             rs.cut_all(False)
 
         for t0 in tqdm(np.arange(t_span[0],t_span[1],self.u_step), disable=(not enable_bar)) :
-            self.disturbance_if = rs.disturbance_if
             rs.integrate([t0, t0+self.u_step], method)
+            if repartition :
+                rs.repartition(t0+self.u_step)
+                # rs.x_xh0 = rs(t0 + self.u_step)
+                # rs.subpartitions = None
+                # for i in range(control_divisions) :
+                #     rs.cut_all(True, False, round(t0/t_step))
+                # for i in range(integral_divisions) :
+                #     rs.cut_all(False, False, round(t0/t_step))
         
         return rs
 
-    def compute_reachable_set_eps (self, x_xh0, t_span, control_divisions=0, integral_divisions=0, method='RK45', t_step=None, eps=1, max_primer_depth=1, max_depth=2, check_contr=0.5, cut_dist=False, enable_bar=True, axs=None) -> Partition :
+    def compute_reachable_set_eps (self, x_xh0, t_span, control_divisions=0, integral_divisions=0, method='RK45', t_step=None, eps=1, max_primer_depth=1, max_depth=2, check_contr=0.5, cut_dist=False, repartition=False, enable_bar=True, axs=None) -> Partition :
         print(f"compute_reachable_set_eps: cd={control_divisions}, id={integral_divisions}, eps={eps}, max_primer_depth={max_primer_depth}, max_depth={max_depth}")
         self.embed = True
         rs = Partition(x_xh0,self,self.control_if,True,
@@ -129,6 +136,9 @@ class MixedMonotoneModel :
             if axs is not None :
                 axs[i].clear()
                 rs.draw_tree(axs[i],prog='dot')
+
+            if repartition :
+                rs.repartition(t0+self.u_step)
 
         return rs
 

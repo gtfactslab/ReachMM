@@ -282,6 +282,30 @@ class Partition :
             for part in self.subpartitions :
                 part.cut_all(primer,cut_dist,n0)
     
+    def repartition (self,t) :
+        if self.subpartitions is not None:
+            # x_xh = self.x_xh0 if self.sol is None else self.sol[-1]
+            x_xh = self(t)
+            # print('t_max: ', self.t_max())
+            part_avg = (x_xh[:self.n] + x_xh[self.n:]) / 2
+
+            for part_i in range(2**self.n) :
+                part = np.copy(x_xh)
+                for ind in range (self.n) :
+                    part[ind + self.n*((part_i >> ind) % 2)] = part_avg[ind]
+                # print('subparts.sol')
+                # print(self.subpartitions[part_i])
+                # print(self.subpartitions[part_i].sol)
+                if self.subpartitions[part_i].sol is None :
+                    self.subpartitions[part_i].x_xh0 = part
+                else :
+                    self.subpartitions[part_i].sol[-1] = part
+
+            for part in self.subpartitions :
+                # part.cut_all(primer,cut_dist,len(self.sol)-1)
+                part.repartition(t)
+
+    
     def sg_boxes (self, t, xi=0, yi=1, T=None) :
         if self.sol is not None:
             if self.t_step is None and t <= self.t_max() :
@@ -310,7 +334,7 @@ class Partition :
             boxes = self.sg_boxes(t, xi, yi, T)
             shape = so.unary_union(boxes)
             xs, ys = shape.exterior.xy    
-            ax.fill(xs, ys, alpha=0.75, fc='none', ec=color)
+            ax.fill(xs, ys, alpha=1, fc='none', ec=color)
             if draw_bb:
                 bb = self(t)
                 if T is not None:

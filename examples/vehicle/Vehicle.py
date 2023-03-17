@@ -1,11 +1,78 @@
 import numpy as np
-from ReachMM import ControlFunction
+from numpy import tan, arctan2, arctan
+from time import time
+from ReachMM import MixedMonotoneModel, ControlFunction, ControlInclusionFunction
+from ReachMM import DisturbanceFunction, DisturbanceInclusionFunction
+from ReachMM.decomp import d_sin, d_cos, d_b1b2
 from casadi import *
 
-NUM_TRAJS = 50000
-FILENAME = 'twoobs'
-PROCESSES = 8
-PLOT_DATA = False
+'''
+x = [
+    X_cm, (center of mass x)
+    Y_cm, (center of mass y)
+    psi,  (heading angle)
+    v,    (speed)
+]
+u = [
+    u1, (acceleration),
+    u2, (front steering angle)
+]
+'''
+
+class VehicleModel (MixedMonotoneModel):
+    def __init__(self, control: ControlFunction = None, control_if: ControlInclusionFunction = None, u_step=2.5e-1, 
+                 lf=1, lr=1,
+                 disturbance: DisturbanceFunction = None, disturbance_if: DisturbanceInclusionFunction = None):
+        super().__init__(control, control_if, u_step, disturbance, disturbance_if)
+        self.lf = lf
+        self.lr = lr
+        self.u_step = u_step
+
+    def f(self, x, u, w) :
+        u1, u2 = u
+        X, Y, psi, v = x.ravel()
+        beta = arctan2((self.lr * tan(u2)),(self.lf + self.lr))
+        dX = v*np.cos(psi + beta)
+        dY = v*np.sin(psi + beta)
+        dpsi = v*np.sin(beta)/self.lr
+        dv = u1
+        xdot = np.array([dX, dY, dpsi, dv])
+        return xdot
+    
+    def d(self, x, xh, u, uh, w, wh) :
+        u1, u2 = u
+        u1h, u2h = uh
+        X, Y, psi, v = x.ravel()
+        Xh, Yh, psih, vh = xh.ravel()
+        beta = arctan2((self.lr * tan(u2)),(self.lf + self.lr))
+        betah = arctan2((self.lr * tan(u2h)),(self.lf + self.lr))
+        dX = d_b1b2( [v , d_cos(psi + beta, psih + betah)], 
+                     [vh, d_cos(psih + betah, psi + beta)])
+        dY = d_b1b2( [v , d_sin(psi + beta, psih + betah)], 
+                     [vh, d_sin(psih + betah, psi + beta)])
+        dpsi = d_b1b2( [v , d_sin(beta, betah)],
+                       [vh, d_sin(betah, beta)])
+        dv = u1
+        xdot = np.array([dX, dY, dpsi, dv])
+        return xdot
+    
+    def d_i(self, i, x, xh, u, uh, w, wh) :
+        # u[0], u[1] = u
+        if i == 3:
+            return u[0]
+        # u1h, uhat[1] = uhat
+        # X, Y, x[2], x[3] = x
+        # Xh, Yh, xhat[2], xhat[3] = xhat
+        beta = arctan((self.lr * tan(u[1]))/(self.lf + self.lr))
+        betah = arctan((self.lr * tan(uh[1]))/(self.lf + self.lr))
+        if i == 0:
+            return d_b1b2( (x[3] , d_cos(x[2] + beta, xh[2] + betah)), 
+                        (xh[3], d_cos(xh[2] + betah, x[2] + beta)))
+        if i == 1:
+            return d_b1b2((x[3] , d_sin(x[2] + beta, xh[2] + betah)), 
+                        (xh[3], d_sin(xh[2] + betah, x[2] + beta)))
+        return d_b1b2( (x[3] , d_sin(beta, betah)),
+                    (xh[3], d_sin(betah, beta)))
 
 class VehicleMPCController (ControlFunction) :
     def __init__(self, n_horizon=20, u_step=2.5e-1, euler_steps=10, lr=1, lf=1):
@@ -86,70 +153,3 @@ class VehicleMPCController (ControlFunction) :
         sol = self.opti.solve()
         # print(sol.value(self.slack))
         return sol.value(self.uu[:,0])
-
-# if __name__ == '__main__' :
-#     from tqdm import tqdm
-#     from multiprocessing import Pool
-#     from datetime import datetime
-#     from matplotlib import pyplot as plt
-#     from VehicleModel import VehicleModel
-#     from VehicleUtils import gen_ics
-
-#     FILEPATH = 'data/' + FILENAME + datetime.now().strftime('_%Y%m%d-%H%M%S') + '.npy'
-
-#     problem_horizon = 20
-
-#     NUM_POINTS = NUM_TRAJS * problem_horizon
-
-#     print("Writing to " + FILEPATH)
-#     print("TRAJECTORIES: %d" % NUM_TRAJS)
-#     print("PROB HORIZON: %d" % problem_horizon)
-#     print("TOTAL POINTS: %d" % NUM_POINTS)
-
-#     XRANGE = ([-10,10],)
-#     YRANGE = ([5,10],)
-#     PRANGE = ([-np.pi,np.pi],)
-#     VRANGE = ([-10,10],)
-
-#     control = VehicleMPCController()
-#     model = VehicleModel(u=control,u_step=control.u_step)
-
-#     t_end = control.u_step * problem_horizon
-
-#     X0 = gen_ics(XRANGE, YRANGE, PRANGE, VRANGE, NUM_TRAJS)
-
-#     X = np.ones((NUM_POINTS, 4))
-#     U = np.ones((NUM_POINTS, 2))
-
-#     def task(x) :
-#         try :
-#             traj = model.compute_trajectory(x0=x, t_step=control.u_step, enable_bar=False, t_span=[0,t_end])
-#             tt = traj['t']; xx = traj['x']; uu = traj['u']
-#             return [tt, xx.T, uu.T]
-#         except:
-#             return task(gen_ics(XRANGE, YRANGE, PRANGE, VRANGE, 1)[0,:])
-
-#     pool = Pool(processes=PROCESSES)
-
-#     if PLOT_DATA :
-#         fig, axs = plt.subplots(4,4)
-#         axs = axs.reshape(-1)
-#         axsi = 0
-
-#     for i, result in enumerate(tqdm(pool.imap_unordered(task, X0), total=NUM_TRAJS, smoothing=0)) :
-#         tt, xx, uu = result
-#         X[i*problem_horizon:(i+1)*problem_horizon,:] = xx
-#         U[i*problem_horizon:(i+1)*problem_horizon,:] = uu
-#         if PLOT_DATA :
-#             # axsi = (axsi + 1) % len(axs); ax = axs[axsi]; ax.clear()
-#             # cmap = sns.cubehelix_palette(rot=-0.4, as_cmap=True)
-#             # points = ax.scatter(xx[:,0], xx[:,1], c=tt, cmap=cmap, s=1)
-#             # ax.set_xlim([-15,15]); ax.set_ylim([-15,15])
-#             # # fig.colorbar(points, ax=ax)
-#             # # ax.set_title("y vs x, color t")
-#             # plt.ion(); plt.show(); plt.pause(0.00000001)
-#             pass
-
-#     with open(FILEPATH, 'wb') as f :
-#         np.savez(f, X=X, U=U)
-

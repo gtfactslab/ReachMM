@@ -37,6 +37,11 @@ rs, runtime = run_time(model.compute_reachable_set, x0d, t_span, 3, 0, 'euler', 
 print(runtime)
 print(rs(6))
 
+X0 = gen_ics_pert(x0, pert, MC_N)
+trajs = []
+for mc_x0 in X0 :
+    trajs.append(model.compute_trajectory(mc_x0, t_span, 'euler', t_step, enable_bar=False))
+
 # eps, max_primer_depth, max_depth, cd, id, check_cont, dist, cut_dist
 experiments = (((0,0,0,0,0,0.5,0,False), (  0,0,0,2,0,0.5,0,False), (  1,0,0,2,2,0.5,0,False), (   0,0,0,3,2,0.5,0,False)),
                ((0.1,1,3,0,0,0,0,False), (0.1,2,4,0,0,0,0,False), (0.1,2,10,0,0,0,0,False), (0.07,2,10,0,0,0,0,False)))
@@ -46,30 +51,12 @@ fig.subplots_adjust(left=0.025, right=0.975, bottom=0.125, top=0.9, wspace=0.125
 fig2, axs2 = plt.subplots(2,4,dpi=100,figsize=[14,8],squeeze=False)
 fig2.subplots_adjust(left=0.025, right=0.975, bottom=0.125, top=0.9, wspace=0.125, hspace=0.2)
 
-# RANGES = [
-#     (x0 - pert),
-#     ()
-# ]
-# X0 = gen_ics(np.column_stack((x0-pert,x0+pert)), MC_N)
-print(x0-pert, x0+pert)
-# X0 = np.random.uniform(x0-pert, x0+pert, MC_N)
-X0 = gen_ics_pert(x0, pert, MC_N)
-# print(X0)
-
-trajs = []
-
-for mc_x0 in X0 :
-    trajs.append(model.compute_trajectory(mc_x0, t_span, 'euler', t_step, enable_bar=False))
-
-# print(trajs[0](tt)[0,:])
-# print(trajs[0](tt)[1,:])
-
 for i, exps in enumerate(experiments) :
     for j, exp in enumerate(exps) :
         eps, max_primer_depth, max_depth, cd, id, check_contr, dist, cut_dist = exp
 
         # rs = model.compute_reachable_set_eps(x0d, t_span, cd, id, 'euler', t_step, eps, max_depth, check_cont, False)
-        rs, runtime = run_time(model.compute_reachable_set_eps, x0d, t_span, cd, id, 'euler', t_step, eps, max_primer_depth, max_depth, check_contr, cut_dist, enable_bar=True, axs=axs2.reshape(-1))
+        rs, runtime = run_time(model.compute_reachable_set_eps, x0d, t_span, cd, id, 'euler', t_step, eps, max_primer_depth, max_depth, check_contr, cut_dist, False, enable_bar=True, axs=axs2.reshape(-1))
         print(runtime)
 
         axs[i,j].set_xlim([-2.5,3.5])
