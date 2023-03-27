@@ -56,7 +56,7 @@ def plot_Y_X (fig, ax, tt, XX, YY, xlim=[-15,15], ylim=[-15,15], lw=2, show_colo
     # ax.add_patch(Rectangle((-4-np.sqrt(2)*3/2,4-np.sqrt(2)*3/2),np.sqrt(2)*3,np.sqrt(2)*3))
     points = np.array([XX,YY]).T.reshape(-1,1,2)
     segs = np.concatenate([points[:-1],points[1:]],axis=1)
-    lc = LineCollection(segs, lw=lw, cmap=plt.get_cmap('cividis'))
+    lc = LineCollection(segs, lw=lw, cmap=plt.get_cmap('cividis'),zorder=0)
     # lc = LineCollection(segs, lw=lw)
     lc.set_array(tt)
     ax.add_collection(lc)

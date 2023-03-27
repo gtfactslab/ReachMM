@@ -100,6 +100,7 @@ class MixedMonotoneModel :
         return traj
 
     def compute_reachable_set (self, x_xh0, t_span, control_divisions=0, integral_divisions=0, method='RK45', t_step=None, repartition=False, enable_bar=True) :
+        print(f"compute_reachable_set: cd={control_divisions}, id={integral_divisions}")
         self.embed = True
         rs = Partition(x_xh0,self,self.control_if,True,
                        self.disturbance_if, t_step=t_step)
@@ -122,7 +123,7 @@ class MixedMonotoneModel :
         return rs
 
     def compute_reachable_set_eps (self, x_xh0, t_span, control_divisions=0, integral_divisions=0, method='RK45', t_step=None, eps=1, max_primer_depth=1, max_depth=2, check_contr=0.5, cut_dist=False, repartition=False, enable_bar=True, axs=None) -> Partition :
-        print(f"compute_reachable_set_eps: cd={control_divisions}, id={integral_divisions}, eps={eps}, max_primer_depth={max_primer_depth}, max_depth={max_depth}")
+        print(f"compute_reachable_set_eps: cd={control_divisions}, id={integral_divisions}, eps={eps}, max_primer_depth={max_primer_depth}, max_depth={max_depth}, check_contr={check_contr}, cut_dist={cut_dist}, repartition={repartition}")
         self.embed = True
         rs = Partition(x_xh0,self,self.control_if,True,
                        self.disturbance_if, t_step=t_step)

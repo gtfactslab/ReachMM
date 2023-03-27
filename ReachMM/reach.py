@@ -23,6 +23,13 @@ def width (x_xh:ArrayLike, scale=None) :
     width = x_xh[n:] - x_xh[:n]
     return width if scale is None else width / scale
 
+def volume (x_xh:ArrayLike, scale=None) :
+    w = width(x_xh, scale)
+    ret = 1
+    for wi in w :
+        ret *= wi
+    return ret
+
 def sg_box (x_xh:ArrayLike, xi=0,yi=1):
     n = len(x_xh) // 2
     Xl, Yl, Xu, Yu = \
@@ -174,7 +181,11 @@ class Partition :
                 if self.sol is None:
                     self.sol = [self.x_xh0]
                 for n in range(round(t_span[0]/self.t_step),round(t_span[1]/self.t_step)):
-                    self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
+                    # self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
+                    if self.control_if.mode == 'disclti' :
+                        self.sol.append(self.model.func_(n*self.t_step, self.get_sol(n)))
+                    else :
+                        self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
 
             else :
                 ret = solve_ivp(self.model.func_, t_span, x_xh0,
@@ -307,23 +318,24 @@ class Partition :
 
     
     def sg_boxes (self, t, xi=0, yi=1, T=None) :
+        if self.subpartitions is not None and (t >= self.t_max()) :
+            boxes = []
+            for subpart in self.subpartitions :
+                boxes.extend(subpart.sg_boxes(t,xi,yi,T))
+            return boxes
+
         if self.sol is not None:
             if self.t_step is None and t <= self.t_max() :
                 bb = self.sol(t)
                 if T is not None :
                     bb = d_positive(T) @ bb
                 return [sg_box(bb,xi,yi)]
-            elif self.t_step is not None and t < self.t_max() :
+            elif self.t_step is not None and t <= self.t_max() :
                 bb = self.get_sol(round(t/self.t_step))
                 if T is not None :
                     bb = d_positive(T) @ bb
                 return [sg_box(bb,xi,yi)]
 
-        if self.subpartitions is not None :
-            boxes = []
-            for subpart in self.subpartitions :
-                boxes.extend(subpart.sg_boxes(t,xi,yi,T))
-            return boxes
         
         return self.x_xh0
     
@@ -346,34 +358,6 @@ class Partition :
     def width(self, scale=None):
         return width(self.interpolants[-1], scale)
 
-    def _call_single(self, t):
-        # if self.subpartitions is not None :
-        #     x_xht2_parts = np.array([subpart(t) 
-        #                             for subpart in self.subpartitions])
-        #     # n = x_xht2_parts.shape[1] // 2
-        #     xt2_min  = np.min(x_xht2_parts[:,:self.n], axis=0)
-        #     xht2_max = np.max(x_xht2_parts[:,self.n:], axis=0)
-        #     return np.concatenate((xt2_min,xht2_max))
-        
-        # if self.sol is not None:
-        #     if self.t_step is None and t <= self.t_max() :
-        #         return self.sol(t)
-        #     elif self.t_step is not None and t <= self.t_max() :
-        #         return self.get_sol(round(t/self.t_step))
-
-        if self.sol is not None and t <= self.t_max() :
-            return self.sol(t) if self.t_step is None \
-                    else self.get_sol(round(t/self.t_step))
-        elif self.subpartitions is not None :
-            x_xht_parts = np.array([subpart(t) for subpart in self.subpartitions])
-            n = x_xht_parts.shape[1] // 2
-            xt2_min  = np.min(x_xht_parts[:,:n], axis=0)
-            xht2_max = np.max(x_xht_parts[:,n:], axis=0)
-            x_xht = np.concatenate((xt2_min,xht2_max))
-            return x_xht
-
-        return self.x_xh0
-    
     def get_max_depth (self, t=None) :
         if self.subpartitions is None :
             if t is None or t >= self.t_min() :
@@ -408,6 +392,34 @@ class Partition :
             root = min([a for (a,b) in tree])
             pos = nx.nx_agraph.graphviz_layout(G, prog=prog, root=root, args=args)
             nx.draw(G, pos, ax, node_size=20, with_labels=False)
+
+    def _call_single(self, t):
+        # if self.subpartitions is not None :
+        #     x_xht2_parts = np.array([subpart(t) 
+        #                             for subpart in self.subpartitions])
+        #     # n = x_xht2_parts.shape[1] // 2
+        #     xt2_min  = np.min(x_xht2_parts[:,:self.n], axis=0)
+        #     xht2_max = np.max(x_xht2_parts[:,self.n:], axis=0)
+        #     return np.concatenate((xt2_min,xht2_max))
+        
+        # if self.sol is not None:
+        #     if self.t_step is None and t <= self.t_max() :
+        #         return self.sol(t)
+        #     elif self.t_step is not None and t <= self.t_max() :
+        #         return self.get_sol(round(t/self.t_step))
+
+        if self.sol is not None and t <= self.t_max() :
+            return self.sol(t) if self.t_step is None \
+                    else self.get_sol(round(t/self.t_step))
+        elif self.subpartitions is not None :
+            x_xht_parts = np.array([subpart(t) for subpart in self.subpartitions])
+            n = x_xht_parts.shape[1] // 2
+            xt2_min  = np.min(x_xht_parts[:,:n], axis=0)
+            xht2_max = np.max(x_xht_parts[:,n:], axis=0)
+            x_xht = np.concatenate((xt2_min,xht2_max))
+            return x_xht
+
+        return self.x_xh0
 
     def __call__ (self, t) :
         t = np.asarray(t)
