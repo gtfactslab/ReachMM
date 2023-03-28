@@ -11,7 +11,7 @@ from tabulate import tabulate
 from ReachMM.utils import run_time, gen_ics_pert
 from scipy.integrate import solve_ivp
 
-runtime_N = 10
+runtime_N = 1
 
 device = 'cpu'
 MC_N = 200

@@ -31,8 +31,8 @@ class NeuralNetwork (nn.Module) :
 
         if load :
             loadpath = os.path.join(dir, 'model.pt')
-            print(f'Loading model from {loadpath}')
             self.load_state_dict(torch.load(loadpath, map_location=device))
+            print(f'Successfully loaded model from {loadpath}')
 
         self.device = device
         # self.dummy_input = torch.tensor([[0,0,0,0,0]], dtype=torch.float64).to(device)

@@ -7,11 +7,11 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 
-runtime_N = 10
+runtime_N = 1
 
 # device = 'cuda:0'
 device = 'cpu'
-netpath = '10r5r1'
+netpath = '10r5r1-LowLip'
 MC_N = 200
 
 t_step = 1
