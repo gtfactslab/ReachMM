@@ -2,7 +2,7 @@ from ReachMM import NeuralNetworkControl, NeuralNetworkControlIF
 from ReachMM import NeuralNetwork
 from ReachMM.utils import run_time, gen_ics_pert
 from ReachMM.reach import volume
-from DoubleIntegrator import *
+from Quadrotor import *
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,14 +11,14 @@ runtime_N = 1
 
 # device = 'cuda:0'
 device = 'cpu'
-netpath = '10r5r1'
+netpath = '6r32r32r3-LP'
 MC_N = 200
 
-t_step = 1
-t_span = [0,6]
-# tt = np.arange(t_span[0],t_span[1] + t_step,t_step)
-tt = np.arange(t_span[1])
-print(tt)
+t_step = 0.1
+t_span = [0,1.2]
+tt = np.arange(t_span[0],t_span[1] + t_step,t_step)
+# tt = np.arange(t_span[1])
+# print(tt)
 
 net = NeuralNetwork('models/' + netpath)
 print(f'loaded net from models/{netpath}')
@@ -27,15 +27,16 @@ control = NeuralNetworkControl(net,device=device)
 # controlif = NeuralNetworkControlIF(net, mode='hybrid', method='CROWN', device=device)
 controlif = NeuralNetworkControlIF(net, mode='disclti', method='CROWN', device=device)
 
-model = DoubleIntegratorModel(control, controlif, u_step=1)
+model = QuadrotorModel(control, controlif, u_step=0.1)
 
-x0 = np.array([2.75, 0])
-pert = np.array([0.25,0.25])
+x0   = np.array([4.7,4.7,3,0.95,0,0])
+pert = np.array([0.01,0.05,0.025,0.0001,0.0001,0.0001])
 
 x0d = np.concatenate((x0 - pert, x0 + pert))
+print(x0d)
 
 traj, runtime = run_time(model.compute_trajectory, x0, t_span, 'euler', t_step, enable_bar=False)
-rs, runtime = run_time(model.compute_reachable_set, x0d, t_span, 3, 0, 'euler', t_step, enable_bar=False)
+rs, runtime = run_time(model.compute_reachable_set, x0d, t_span, 0, 0, 'euler', t_step, enable_bar=False)
 
 print(runtime)
 print(rs(6))
@@ -46,9 +47,12 @@ for mc_x0 in X0 :
     trajs.append(model.compute_trajectory(mc_x0, t_span, 'euler', t_step, enable_bar=False))
 
 # eps, max_primer_depth, max_depth, cd, id, check_cont, dist, cut_dist
-experiments = (((0,0,0,2,0,0,0,False), (0,0,0,2,4,0,0,False)),
-               ((0.075,1,4,0,0,0,0,False), (0.05,2,6,0,0,0,0,False)))
+experiments = (((0,0,0,0,0,0.5,0,False), (0,0,0,1,0,0.5,0,False)),
+               ((0,0,0,0,1,0.5,0,False), (0,0,0,1,1,0.5,0,False)))
+            #    ((0.1,1,3,0,0,0,0,False), (0.05,2,6,0,0,0,0,False)))
 
+# fig1, axs1 = plt.subplots(2,4,dpi=100,figsize=[14,8],squeeze=False)
+# fig1.subplots_adjust(left=0.025, right=0.975, bottom=0.125, top=0.9, wspace=0.125, hspace=0.2)
 fig1, axs1 = plt.subplots(2,2,dpi=100,figsize=[8,8],squeeze=False)
 fig1.subplots_adjust(left=0.075, right=0.95, bottom=0.075, top=0.95, wspace=0.15, hspace=0.25)
 # fig2, axs2 = plt.subplots(2,4,dpi=100,figsize=[14,8],squeeze=False)
@@ -75,13 +79,13 @@ for i, exps in enumerate(experiments) :
         avg_runtime = np.mean(runtimes)
         std_runtime = np.std (runtimes)
 
-        axs1[i,j].set_xlim([-1,3.5])
-        axs1[i,j].set_ylim([-1.5,1])
+        axs1[i,j].set_xlim([4.2,5.3])
+        axs1[i,j].set_ylim([3.9,4.8])
 
         vol = volume(rs(t_span[1]))
         print(f'Runtime: {avg_runtime:.3f}$\pm${std_runtime:.3f}, Volume: {vol:.6f}\n')
 
-        axs1[i,j].text(-0.75,0.85,f'runtime: ${avg_runtime:.3f}\pm{std_runtime:.3f}$\nvolume: {vol:.5f}',fontsize=15,verticalalignment='top')
+        axs1[i,j].text(4.25,4.75,f'runtime: ${avg_runtime:.3f}\pm{std_runtime:.3f}$\nvolume: {vol:.5f}',fontsize=15,verticalalignment='top')
 
 
         for n in range(MC_N) :
