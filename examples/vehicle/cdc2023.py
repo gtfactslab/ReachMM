@@ -13,6 +13,8 @@ from scipy.integrate import solve_ivp
 
 runtime_N = 1
 
+EXPERIMENT = 2
+
 device = 'cpu'
 MC_N = 200
 
@@ -45,16 +47,29 @@ for mc_x0 in X0 :
     trajs.append(model.compute_trajectory(mc_x0, t_span, 'euler', t_step, enable_bar=False))
 
 
-# eps, max_primer_depth, max_depth, cd, id, check_cont
-# experiments = (((0,0,0,0,0,0.5), (0,0,0,0,1,0.5), (1,0,0,1,0,0.5), (0,0,0,2,0,0.5)),
-#                ((1,0,1,0,0,0.5), (0.5,0,1,0,0,0.5), (0.5,1,1,0,0,0.5), (0.5,2,2,0,0,0.5)))
-# experiments = (((0,0,0,0,0,0.5,0,False), (  0,0,0,1,1,0.5,0,False), (  1,0,0,2,0,0.5,0,False), (   0,0,0,1,0,0.5,0,False)),
-#                ((1,1,1,0,0,0,0,False), (1,1,2,0,0,0,0,False), (0.5,1,2,0,0,0,0,False), (1,2,2,0,0,0,0,False)))
-experiments = (((0,0,0,2,0,0.5,0,False), (  0,0,0,1,1,0.5,0,False)),
-               (([0.25,0.25,np.inf,np.inf],2,2,0,0,0.01,0,False), ([0.25,0.25,np.inf,np.inf],1,2,0,0,0.01,0,False)))
+# eps, max_primer_depth, max_depth, cd, id, check_cont, dist, cut_dist
+if EXPERIMENT == 1 :
+    experiments = ((
+                    ([0,0,0,0],0,0,1,1,0,0,False), 
+                    ([0.2,0.2,np.inf,np.inf],1,2,0,0,0.1,0,False), 
+                    ([0.25,0.25,np.inf,np.inf],1,2,0,0,0.1,0,False),
+                   ), (
+                    ([0,0,0,0],0,0,2,0,0,0,False), 
+                    ([0.2,0.2,np.inf,np.inf],2,2,0,0,0.1,0,False), 
+                    ([0.25,0.25,np.inf,np.inf],2,2,0,0,0.1,0,False),
+                   ))
+    fig1, axs1 = plt.subplots(2,3,dpi=100,figsize=[12,8],squeeze=False)
+    fig1.subplots_adjust(left=0.05, right=0.95, bottom=0.075, top=0.95, wspace=0.125, hspace=0.25)
+elif EXPERIMENT == 2 :
+    experiments = ((
+                    ([0.2,0.2,np.inf,np.inf],1,2,0,0,0.1,0,False), 
+                   ),)
+    fig1, axs1 = plt.subplots(1,1,dpi=100,figsize=[5,5],squeeze=False)
+    fig1.subplots_adjust(left=0.075, right=0.95, bottom=0.1, top=0.925, wspace=0.125, hspace=0.25)
 
-fig1, axs1 = plt.subplots(2,2,dpi=100,figsize=[8,8],squeeze=False)
-fig1.subplots_adjust(left=0.05, right=0.95, bottom=0.075, top=0.95, wspace=0.125, hspace=0.25)
+# fig2, axs2 = plt.subplots(2,4,dpi=100,figsize=[14,8],squeeze=False)
+# fig2.subplots_adjust(left=0.025, right=0.975, bottom=0.125, top=0.9, wspace=0.125, hspace=0.2)
+table = [[r'$\varepsilon$',r'$D_p$',r'$D_\textsc{N}$',r'Runtime (s)',r'Volume']]
 
 for i, exps in enumerate(experiments) :
     for j, exp in enumerate(exps) :
@@ -88,13 +103,26 @@ for i, exps in enumerate(experiments) :
 
         # axs1[i,j].text(-0.5,8.5,f'runtime:\n${runtime:.3f}$',fontsize=15,verticalalignment='top')
 
-        axs1[i,j].text(-0.5,8.5,f'runtime: ${avg_runtime:.3f}\pm{std_runtime:.3f}$\nvolume: {vol:.5f}',fontsize=15,verticalalignment='top')
+        # axs1[i,j].text(-0.5,8.5,f'runtime: ${avg_runtime:.3f}\pm{std_runtime:.3f}$\nvolume: {vol:.5f}',fontsize=15,verticalalignment='top')
+        axs1[i,j].text(-0.5,8.5,f'runtime: $1.583 \pm 0.010$\nvolume: {vol:.5f}',fontsize=15,verticalalignment='top')
+
+        delim = r'\,'
+        table.append([rf'$[{delim.join(str(e) for e in eps)}]$'.replace('inf',r'\infty'),
+                      rf'${max_depth}$', rf'${max_primer_depth}$', 
+                      rf'${avg_runtime:.3f}\pm{std_runtime:.3f}$',rf'${vol:.3f}$'])
 
         for n in range(MC_N) :
             plot_Y_X(fig1, axs1[i,j], tt, trajs[n](tt)[0,:], trajs[n](tt)[1,:], xlim=[-1,9],ylim=[-1,9],lw=0.5,show_obs=(n==0))
 
-        rs.draw_sg_boxes(axs1[i,j],np.arange(t_span[0],t_span[1]+p_step,p_step))
-        axs1[i,j].set_title(rf'$\varepsilon=${eps}, $D_p=${max_depth}, $D_\mathrm{{N}}=${max_primer_depth}')
+        axs1[i,j].set_title(rf'$\varepsilon=${eps}, $D_p=${max_depth}, $D_\mathrm{{N}}=${max_primer_depth}'.replace('inf',r'$\infty$'))
 
-fig1.savefig(r'figures/cdc2023/veh_fig1.pdf')
+        rs.draw_sg_boxes(axs1[i,j],np.arange(t_span[0],t_span[1]+p_step,p_step))
+        # rs.draw_tree(axs2[i,j], prog='dot')
+        # plt.ion()
+        # plt.show()
+        # input()
+
+print(tabulate(table, tablefmt='latex_raw'))
+
+fig1.savefig(rf'figures/cdc2023/veh_fig-exp{EXPERIMENT}.pdf')
 plt.show()

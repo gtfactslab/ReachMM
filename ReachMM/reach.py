@@ -354,6 +354,10 @@ class Partition :
                 xsb, ysb = sg_box(bb,xi,yi).exterior.xy
                 ax.fill(xsb, ysb, alpha=0.5, fc='none', ec=color, linestyle='--')
 
+    def area (self, t, xi=0, yi=1, T=None) :
+        boxes = self.sg_boxes(t, xi, yi, T)
+        shape = so.unary_union(boxes)
+        return shape.area
     
     def width(self, scale=None):
         return width(self.interpolants[-1], scale)
