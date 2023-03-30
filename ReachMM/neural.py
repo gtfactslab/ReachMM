@@ -27,7 +27,7 @@ class NeuralNetwork (nn.Module) :
                 if a == 'ReLU' :
                     self.mods.append(nn.ReLU())
 
-        self.seq = nn.Sequential(*self.mods)        
+        self.seq = nn.Sequential(*self.mods)
 
         if load :
             loadpath = os.path.join(dir, 'model.pt')

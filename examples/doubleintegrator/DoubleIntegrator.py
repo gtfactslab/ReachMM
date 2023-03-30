@@ -20,6 +20,8 @@ class DoubleIntegratorModel(MixedMonotoneModel) :
         self.Am, self.An = d_metzler(self.A, True)
         self.Bp, self.Bn = d_positive(self.B, True)
 
+        self.c = np.array([0])
+
         if control_if.mode == 'disclti' :
             control_if.A = self.A
             control_if.B = self.B

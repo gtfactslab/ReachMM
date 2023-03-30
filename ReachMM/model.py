@@ -74,8 +74,16 @@ class MixedMonotoneModel :
                                     for i in range(dim)]
                 self.sum_func += 1
             elif self.control_if.mode == 'disclti' :
-                xdot  = self.control_if._Mm @ x + self.control_if._Mn @ xh + self.control_if.Bp @ self.control_if._d.reshape(-1) + self.control_if.Bn @ self.control_if.d_.reshape(-1)
-                xhdot = self.control_if.M_m @ xh + self.control_if.M_n @ x + self.control_if.Bn @ self.control_if._d.reshape(-1) + self.control_if.Bp @ self.control_if.d_.reshape(-1)
+                xdot  = self.control_if._Mm @ x + \
+                        self.control_if._Mn @ xh + \
+                        self.control_if.Bp @ self.control_if._d.reshape(-1) + \
+                        self.control_if.Bn @ self.control_if.d_.reshape(-1) + \
+                        self.c
+                xhdot = self.control_if.M_m @ xh + \
+                        self.control_if.M_n @ x + \
+                        self.control_if.Bn @ self.control_if._d.reshape(-1) + \
+                        self.control_if.Bp @ self.control_if.d_.reshape(-1) + \
+                        self.c
             return np.concatenate((xdot,xhdot))
     
     def S (self, x0, x1) :

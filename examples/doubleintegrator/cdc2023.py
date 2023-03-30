@@ -61,8 +61,6 @@ experiments = ((
     (0.05,2,6,0,0,0,0,False)
 ))
 
-# fig1, axs1 = plt.subplots(2,4,dpi=100,figsize=[14,8],squeeze=False)
-# fig1.subplots_adjust(left=0.025, right=0.975, bottom=0.125, top=0.9, wspace=0.125, hspace=0.2)
 fig1, axs1 = plt.subplots(2,2,dpi=100,figsize=[8,8],squeeze=False)
 fig1.subplots_adjust(left=0.075, right=0.95, bottom=0.075, top=0.95, wspace=0.15, hspace=0.25)
 fig2, axs2 = plt.subplots(2,4,dpi=100,figsize=[14,8],squeeze=False)
