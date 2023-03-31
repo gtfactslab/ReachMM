@@ -14,6 +14,8 @@ import polytope
 
 runtime_N = 1
 
+EXPERIMENT = 2
+
 # device = 'cuda:0'
 device = 'cpu'
 netpath = '10r5r1'
@@ -53,18 +55,26 @@ for mc_x0 in X0 :
 # eps, max_primer_depth, max_depth, cd, id, check_cont, dist, cut_dist
 # experiments = (((0,0,0,0,0,0.5,0,False), (  0,0,0,2,0,0.5,0,False), (  1,0,0,2,2,0.5,0,False), (   0,0,0,3,2,0.5,0,False)),
 #                ((0.1,1,3,0,0,0,0,False), (0.1,2,4,0,0,0,0,False), (0.1,2,10,0,0,0,0,False), (0.07,2,10,0,0,0,0,False)))
-experiments = ((
-    (0,0,0,2,0,0.5,0,False), 
-    (0,0,0,2,4,0.5,0,False)
-), (
-    (0.1,1,3,0,0,0,0,False), 
-    (0.05,2,6,0,0,0,0,False)
-))
 
-fig1, axs1 = plt.subplots(2,2,dpi=100,figsize=[8,8],squeeze=False)
-fig1.subplots_adjust(left=0.075, right=0.95, bottom=0.075, top=0.95, wspace=0.15, hspace=0.25)
-fig2, axs2 = plt.subplots(2,4,dpi=100,figsize=[14,8],squeeze=False)
-fig2.subplots_adjust(left=0.025, right=0.975, bottom=0.125, top=0.9, wspace=0.125, hspace=0.2)
+if EXPERIMENT == 1:
+    experiments = ((
+        (0,0,0,2,0,0.5,0,False), 
+        (0,0,0,2,4,0.5,0,False)
+    ), (
+        (0.1,1,3,0,0,0,0,False), 
+        (0.05,2,6,0,0,0,0,False)
+    ))
+    fig1, axs1 = plt.subplots(2,2,dpi=100,figsize=[8,8],squeeze=False)
+    fig1.subplots_adjust(left=0.075, right=0.95, bottom=0.075, top=0.95, wspace=0.15, hspace=0.25)
+elif EXPERIMENT == 2:
+    experiments = ((
+        (0.1,2,10,0,0,0,0,False),
+    ),)
+    fig1, axs1 = plt.subplots(1,1,dpi=100,figsize=[8,8],squeeze=False)
+    fig1.subplots_adjust(left=0.075, right=0.95, bottom=0.075, top=0.95, wspace=0.15, hspace=0.25)
+
+    fig2, axs2 = plt.subplots(2,3,dpi=100,figsize=[14,8],squeeze=False)
+    fig2.subplots_adjust(left=0, right=1, bottom=0, top=0.95, wspace=0, hspace=0.075)
 
 table = [[r'Method',r'Setup',r'Runtime (s)',r'Area']]
 
@@ -78,12 +88,18 @@ for i, exps in enumerate(experiments) :
         runtimes = np.empty(runtime_N)
         for n in range(runtime_N) :
             if max_depth != 0 :
-                rs, runtime = run_time(model.compute_reachable_set_eps, x0d, t_span, cd, id, 'euler', t_step, eps, max_primer_depth, max_depth, check_contr, cut_dist, False, enable_bar=False)#, axs=axs2.reshape(-1))
+                rs, runtime = run_time(model.compute_reachable_set_eps, x0d, 
+                                       t_span, cd, id, 'euler', t_step, eps, 
+                                       max_primer_depth, max_depth, check_contr, 
+                                       cut_dist, False, enable_bar=False, 
+                                       axs=None if EXPERIMENT==1 else axs2.reshape(-1))
                 runtimes[n] = runtime
                 cg = '-CG'
             else :
                 # rs, runtime = run_time(model.compute_reachable_set_eps, x0d, t_span, cd, id, 'euler', t_step, eps, max_primer_depth, max_depth, check_contr, cut_dist, True, enable_bar=True)
-                rs, runtime = run_time(model.compute_reachable_set, x0d, t_span, cd, id, 'euler', t_step, False, enable_bar=False)
+                rs, runtime = run_time(model.compute_reachable_set, x0d, 
+                                       t_span, cd, id, 'euler', t_step, 
+                                       False, enable_bar=False)
                 runtimes[n] = runtime
                 # small hack for plotting purposes
                 if n == runtime_N - 1 :
@@ -120,56 +136,60 @@ for i, exps in enumerate(experiments) :
 
 print(rss)
 
-fig3, axs3 = plt.subplots(1,2,dpi=100,figsize=[11,5],squeeze=True)
-fig3.subplots_adjust(left=0.05, right=0.95, bottom=0.1, top=0.95, wspace=0.125, hspace=0.2)
+if EXPERIMENT == 1 :
+    fig3, axs3 = plt.subplots(1,2,dpi=100,figsize=[11,5],squeeze=True)
+    fig3.subplots_adjust(left=0.05, right=0.95, bottom=0.1, top=0.95, wspace=0.125, hspace=0.2)
 
-LP_parts = ['4.npy', '16.npy']
-# LP_parts = ['55.npy', '205.npy']
-LipBnB_eps = ['0.1.npy', '0.001.npy']
+    LP_parts = ['4.npy', '16.npy']
+    # LP_parts = ['55.npy', '205.npy']
+    LipBnB_eps = ['0.1.npy', '0.001.npy']
 
-for axi, ax in enumerate(axs3) :
-    ax.set_xlim([-1,3.5])
-    ax.set_ylim([-1.5,1])
+    for axi, ax in enumerate(axs3) :
+        ax.set_xlim([-1,3.5])
+        ax.set_ylim([-1.5,1])
 
-    for n in range(MC_N) :
-        ax.scatter(trajs[n](tt)[0,:],trajs[n](tt)[1,:], s=0.25, c='r')
+        for n in range(MC_N) :
+            ax.scatter(trajs[n](tt)[0,:],trajs[n](tt)[1,:], s=0.25, c='r')
 
-    # ReachMM-CG
-    rss[1][axi].draw_sg_boxes(ax,tt)
+        # ReachMM-CG
+        rss[1][axi].draw_sg_boxes(ax,tt)
 
-    # ReachLP-Uniform
-    # LP = np.load('comparisons/ReachLP-Results/GreedySimGuided-' + LP_parts[axi], allow_pickle=True)
-    LP = np.load('comparisons/ReachLP-Results/Uniform-' + LP_parts[axi], allow_pickle=True)
-    LP_rs = np.array([a[1] for a in LP])
-    print('ReachLP Areas for Uniform-' + LP_parts[axi])
-    for t in tt[1:] :
-        boxes = [sg.box(box[0,0],box[1,0],box[0,1],box[1,1]) for box in LP_rs[:,t-1,:,:]]
-        shape = so.unary_union(boxes)
-        xs, ys = shape.exterior.xy    
-        ax.fill(xs, ys, alpha=1, fc='none', ec='tab:orange')
-        print(shape.area)
+        # ReachLP-Uniform
+        # LP = np.load('comparisons/ReachLP-Results/GreedySimGuided-' + LP_parts[axi], allow_pickle=True)
+        LP = np.load('comparisons/ReachLP-Results/Uniform-' + LP_parts[axi], allow_pickle=True)
+        LP_rs = np.array([a[1] for a in LP])
+        print('ReachLP Areas for Uniform-' + LP_parts[axi])
+        for t in tt[1:] :
+            boxes = [sg.box(box[0,0],box[1,0],box[0,1],box[1,1]) for box in LP_rs[:,t-1,:,:]]
+            shape = so.unary_union(boxes)
+            xs, ys = shape.exterior.xy    
+            ax.fill(xs, ys, alpha=1, fc='none', ec='tab:orange')
+            print(shape.area)
 
-    # ReachLipBnB
-    BnB_AAs = np.load('comparisons/ReachLipBnB-Results/AAs-' + LipBnB_eps[axi])
-    BnB_bbs = np.load('comparisons/ReachLipBnB-Results/bbs-' + LipBnB_eps[axi])
-    print('ReachLipBnB Areas for AAs/bbs-' + LipBnB_eps[axi])
-    for k in range(len(BnB_AAs)) :
-        AA = BnB_AAs[k]; bb = BnB_bbs[k]
-        pltp = polytope.Polytope(AA, bb)
-        lipbnb = pltp.plot(ax, alpha=1, color='none', edgecolor='tab:green', linewidth=1, linestyle='-')
-        lipbnb.set_label('ReachLipBnB')
-        print(pltp.volume)
+        # ReachLipBnB
+        BnB_AAs = np.load('comparisons/ReachLipBnB-Results/AAs-' + LipBnB_eps[axi])
+        BnB_bbs = np.load('comparisons/ReachLipBnB-Results/bbs-' + LipBnB_eps[axi])
+        print('ReachLipBnB Areas for AAs/bbs-' + LipBnB_eps[axi])
+        for k in range(len(BnB_AAs)) :
+            AA = BnB_AAs[k]; bb = BnB_bbs[k]
+            pltp = polytope.Polytope(AA, bb)
+            lipbnb = pltp.plot(ax, alpha=1, color='none', edgecolor='tab:green', linewidth=1, linestyle='-')
+            lipbnb.set_label('ReachLipBnB')
+            print(pltp.volume)
 
-    legendhack = [
-        Line2D([0], [0], lw=1, color='tab:blue', label='ReachMM-CG'),
-        Line2D([0], [0], lw=1, color='tab:orange', label='ReachLP-Uniform'),
-        Line2D([0], [0], lw=1, color='tab:green', label='ReachLipBnB'),
-    ]
+        legendhack = [
+            Line2D([0], [0], lw=1, color='tab:blue', label='ReachMM-CG'),
+            Line2D([0], [0], lw=1, color='tab:orange', label='ReachLP-Uniform'),
+            Line2D([0], [0], lw=1, color='tab:green', label='ReachLipBnB'),
+        ]
 
-    ax.legend(legendhack, ['ReachMM-CG', 'ReachLP-Uniform', 'ReachLipBnB'])
+        ax.legend(legendhack, ['ReachMM-CG', 'ReachLP-Uniform', 'ReachLipBnB'])
 
-print(tabulate(table, tablefmt='latex_raw'))
+    print(tabulate(table, tablefmt='latex_raw'))
+
+    fig3.savefig(r'figures/cdc2023/DI_fig3.pdf')
+else :
+    fig2.savefig(r'figures/cdc2023/DI_fig2.pdf')
 
 fig1.savefig(r'figures/cdc2023/DI_fig1.pdf')
-fig3.savefig(r'figures/cdc2023/DI_fig3.pdf')
 plt.show()

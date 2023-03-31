@@ -145,6 +145,7 @@ class MixedMonotoneModel :
             if axs is not None :
                 axs[i].clear()
                 rs.draw_tree(axs[i],prog='dot')
+                axs[i].set_title(f'$t_{i}$', x=0.25, y=0.925, fontsize=20)
 
             if repartition :
                 rs.repartition(t0+self.u_step)

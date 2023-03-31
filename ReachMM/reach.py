@@ -384,18 +384,30 @@ class Partition :
             return None
         else :
             edges = [(self._id, s._id) for s in self.subpartitions]
-            edges.extend(chain.from_iterable([y for s in self.subpartitions if (y := s.get_tree()) is not None]))
-            return edges
+            # colors = [('tab:blue' if self.primer else 'none', 'tab:blue' if s.primer else 'none') for s in self.subpartitions]
+            colors = ['tab:blue' if s.primer else 'none' for s in self.subpartitions]
+            # colors = ['tab:blue' if self.primer else 'none']
+            edges.extend(chain.from_iterable([y[0] for s in self.subpartitions if (y := s.get_tree()) is not None]))
+            colors.extend(chain.from_iterable([y[1] for s in self.subpartitions if (y := s.get_tree()) is not None]))
+            return edges, colors
 
     def draw_tree (self, ax, prog="twopi", args="") :
         # print(self.get_tree())
         G = nx.Graph()
-        tree = self.get_tree()
+        tree, colors = self.get_tree()
+        colors.insert(0,'none')
+        print(len(tree))
         if tree is not None: 
             G.add_edges_from(tree)
+            print(G)
             root = min([a for (a,b) in tree])
             pos = nx.nx_agraph.graphviz_layout(G, prog=prog, root=root, args=args)
-            nx.draw(G, pos, ax, node_size=20, with_labels=False)
+            node_collection = nx.draw_networkx_nodes(G, pos, ax=ax, node_size=75, node_color=colors, linewidths=2, edgecolors='black')
+            node_collection.set_zorder(2)
+            edge_collection = nx.draw_networkx_edges(G, pos, ax=ax)
+            edge_collection.set_zorder(2)
+            ax.set_axis_off()
+
 
     def _call_single(self, t):
         # if self.subpartitions is not None :
