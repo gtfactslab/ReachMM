@@ -1,3 +1,16 @@
+import argparse
+
+parser = argparse.ArgumentParser(description="Double Integrator Experiments for CDC Paper")
+
+parser.add_argument('-T', '--t_end', help="End time for simulation",\
+                    type=int, default=6)
+parser.add_argument('-N', '--runtime_N', help="Number of calls for time averaging",\
+                    type=int, default=1)
+parser.add_argument('--tree', help="Enable for Tree (Figure 2)", \
+                    default=False, action='store_true')
+
+args = parser.parse_args()
+
 from ReachMM import NeuralNetworkControl, NeuralNetworkControlIF
 from ReachMM import NeuralNetwork
 from ReachMM.utils import run_time, gen_ics_pert
@@ -12,9 +25,9 @@ import shapely.geometry as sg
 import shapely.ops as so
 import polytope
 
-runtime_N = 1
+runtime_N = args.runtime_N
 
-EXPERIMENT = 2
+EXPERIMENT = 1 if args.tree is False else 2
 
 # device = 'cuda:0'
 device = 'cpu'
@@ -22,7 +35,7 @@ netpath = '10r5r1'
 MC_N = 200
 
 t_step = 1
-t_span = [0,6]
+t_span = [0,args.t_end]
 # tt = np.arange(t_span[0],t_span[1] + t_step,t_step)
 tt = np.arange(t_span[1])
 print(tt)
@@ -159,7 +172,7 @@ if EXPERIMENT == 1 :
         LP = np.load('comparisons/ReachLP-Results/Uniform-' + LP_parts[axi], allow_pickle=True)
         LP_rs = np.array([a[1] for a in LP])
         print('ReachLP Areas for Uniform-' + LP_parts[axi])
-        for t in tt[1:] :
+        for t in tt[1:6] :
             boxes = [sg.box(box[0,0],box[1,0],box[0,1],box[1,1]) for box in LP_rs[:,t-1,:,:]]
             shape = so.unary_union(boxes)
             xs, ys = shape.exterior.xy    

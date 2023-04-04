@@ -1,3 +1,16 @@
+import argparse
+
+parser = argparse.ArgumentParser(description="Double Integrator Experiments for CDC Paper")
+
+parser.add_argument('-T', '--t_end', help="End time for simulation",\
+                    type=float, default=1.25)
+parser.add_argument('-N', '--runtime_N', help="Number of calls for time averaging",\
+                    type=int, default=1)
+parser.add_argument('--table', help="Enable for Table I", \
+                    default=False, action='store_true')
+
+args = parser.parse_args()
+
 import numpy as np
 from ReachMM import NeuralNetwork, NeuralNetworkControl, NeuralNetworkControlIF
 from ReachMM.utils import plot_Y_X
@@ -11,7 +24,7 @@ from tabulate import tabulate
 from ReachMM.utils import run_time, gen_ics_pert
 from scipy.integrate import solve_ivp
 
-runtime_N = 1
+runtime_N = args.runtime_N
 
 EXPERIMENT = 2
 
@@ -30,7 +43,7 @@ pert = np.array([0.1,0.1,0.01,0.01])
 xlen = 4
 
 t_step = 0.01; p_step = 0.05 # rs plotting step
-t_span = [0,1.25]
+t_span = [0,args.t_end]
 tt = np.arange(t_span[0],t_span[1]+t_step,t_step)
 
 x0d = np.concatenate((x0 - pert,x0 + pert))
