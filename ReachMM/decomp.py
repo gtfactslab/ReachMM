@@ -1,4 +1,4 @@
-from numpy import sin, cos, abs, pi, sign
+from numpy import sin, cos, abs, pi, sign, inf, diag_indices_from, clip, empty
 
 def d_sin(x, xhat) :
     cx = cos(x)
@@ -51,3 +51,27 @@ def d_x2(x, xhat) :
     elif xhat <= 0 and x <= -xhat :
         return xhat**2
     return 0
+
+def d_metzler (A, separate=False)  :
+    diag = diag_indices_from(A)
+    Am = clip(A, 0, inf); Am[diag] = A[diag]
+    An = A - Am
+    if separate :
+        return Am, An
+    else :
+        n = A.shape[0]
+        ret = empty((2*n,2*n))
+        ret[:n,:n] = Am; ret[n:,n:] = Am
+        ret[:n,n:] = An; ret[n:,:n] = An
+        return ret
+
+def d_positive (B, separate=False) :
+    Bp = clip(B, 0, inf); Bn = clip(B, -inf, 0)
+    if separate :
+        return Bp, Bn
+    else :
+        n,m = B.shape
+        ret = empty((2*n,2*m))
+        ret[:n,:m] = Bp; ret[n:,m:] = Bp
+        ret[:n,m:] = Bn; ret[n:,:m] = Bn
+        return ret

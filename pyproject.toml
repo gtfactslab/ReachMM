@@ -14,5 +14,7 @@ dependencies = [
     "shapely",
     "matplotlib",
     "casadi",
-    "tabulate"
+    "tabulate",
+    "networkx",
+    "polytope",
 ]

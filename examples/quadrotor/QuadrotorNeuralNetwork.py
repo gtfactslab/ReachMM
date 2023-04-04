@@ -16,7 +16,7 @@ class QuadrotorNeuralNetwork(nn.Module) :
             nn.Linear(32,3)
         )
         state_dict = torch.load('model.pt')
-        self.seq.load_state_dict(state_dict(), map_location=device)
+        self.seq.load_state_dict(state_dict())
         self.seq.eval()
 
     def forward(self,x):

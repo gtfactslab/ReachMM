@@ -64,8 +64,11 @@ pxx, pyy, ppsi, vv = xx
 dpxx, dpyy, dppsi, dvv, dpxxh, dpyyh, dppsih, dvvh = dxx
 
 # ====== Main Experiment ======
-experiments = [[('global',(1,0),'tab:blue',args.integ_method), ('hybrid',(1,0),'tab:orange',args.integ_method), ('local',(1,0),'tab:green',args.integ_method)]]
-fig, axs = plt.subplots(len(experiments),len(experiments[0])+1,dpi=100,figsize=[14,4],squeeze=False)
+# experiments = [[('global',(1,0),'tab:blue',args.integ_method), ('hybrid',(1,0),'tab:orange',args.integ_method), ('local',(1,0),'tab:green',args.integ_method)]]
+experiments = [[('hybrid',(0,1),'tab:orange',args.integ_method)]]
+# experiments = [[('global',(1,0),'tab:blue',args.integ_method),('local',(1,0),'tab:green',args.integ_method),('hybrid',(1,0),'tab:orange',args.integ_method)]]
+# fig, axs = plt.subplots(len(experiments),len(experiments[0])+1,dpi=100,figsize=[14,4],squeeze=False)
+fig, axs = plt.subplots(len(experiments),3+1,dpi=100,figsize=[14,4],squeeze=False)
 fig.subplots_adjust(left=0.025, right=0.975, bottom=0.125, top=0.9, wspace=0.125, hspace=0.2)
 # fig2, axs2 = plt.subplots(1,4,dpi=100,figsize=[12,3],squeeze=False)
 # fig2.subplots_adjust(left=0.05, right=0.95, bottom=0.15, top=0.95, wspace=0.3, hspace=0.2)
@@ -89,8 +92,10 @@ for i, l in enumerate(experiments) :
         integ_method = integ_method_pre.split()
         for n in range(args.runtime_N) :
             before = time.time()
-            rs = model.compute_reachable_set(x0d, t_span, t_step if integ_method[0] != 'euler' else float(integ_method[1][1:-1]), \
-                control_divisions=cd, integral_divisions=id, method=integ_method[0], enable_bar=False)
+            rs = model.compute_epsilon_reachable_set(x0d, t_span, t_step if integ_method[0] != 'euler' else float(integ_method[1][1:-1]), \
+                eps=1, control_divisions=cd, method=integ_method[0], enable_bar=False)
+            # rs = model.compute_reachable_set(x0d, t_span, t_step if integ_method[0] != 'euler' else float(integ_method[1][1:-1]), \
+            #     control_divisions=cd, integral_divisions=id, method=integ_method[0], enable_bar=False, repartition=True)
             after = time.time()
             runtimes[n] = after - before
         avg_runtime = runtimes.mean()
@@ -127,7 +132,7 @@ plt.figure(fig); plt.savefig(f'figures/main_experiment.pdf')
 
 # ====== Partitioning Experiment ======
 if not args.no_partitioning :
-    experiments_part = [[(1,0), (0,1), (1,1), (0,2)]]
+    experiments_part = [[(0,1), (1,0), (0,2), (1,1), (2,0)]]
     # experiments_part = [[(0,0), (0,1), (1,0)],\
     #                     [(0,2), (1,1), (2,0)]]
 
@@ -143,7 +148,7 @@ if not args.no_partitioning :
             for n in range(args.runtime_N) :
                 before = time.time()
                 rs = model.compute_reachable_set(x0d, t_span, t_step if args.integ_method != 'euler' else model.u_step, \
-                    control_divisions=cd, integral_divisions=id, method=args.integ_method, enable_bar=False)
+                    control_divisions=cd, integral_divisions=id, method=args.integ_method, enable_bar=False, repartition=True)
                 after = time.time()
                 runtimes[n] = after - before
             avg_runtime = runtimes.mean()

@@ -1,289 +1,462 @@
+from __future__ import annotations
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.collections import PatchCollection
 import shapely.geometry as sg
 import shapely.ops as so
+from scipy.integrate import OdeSolution, solve_ivp
+from numpy.typing import ArrayLike, DTypeLike
+from typing import Callable
+from ReachMM import ControlFunction, ControlInclusionFunction
+from ReachMM import DisturbanceFunction, DisturbanceInclusionFunction
+from ReachMM import NoDisturbance, NoDisturbanceIF
+from ReachMM.utils import run_time
+from ReachMM.decomp import d_positive
+import sys
+from traceback import print_tb
+import networkx as nx
+from itertools import chain
+
+def width (x_xh:ArrayLike, scale=None) :
+    n = len(x_xh) // 2
+    width = x_xh[n:] - x_xh[:n]
+    return width if scale is None else width / scale
+
+def volume (x_xh:ArrayLike, scale=None) :
+    w = width(x_xh, scale)
+    ret = 1
+    for wi in w :
+        ret *= wi
+    return ret
+
+def sg_box (x_xh:ArrayLike, xi=0,yi=1):
+    n = len(x_xh) // 2
+    Xl, Yl, Xu, Yu = \
+        x_xh[xi],   x_xh[yi], \
+        x_xh[xi+n], x_xh[yi+n]
+    # print(Xl,Yl,Xu,Yu)
+    return sg.box(Xl,Yl,Xu,Yu)
+
+class Trajectory :
+    def __init__(self, x0:ArrayLike, model, 
+                 control:ControlFunction, t_step:float=None) -> None:
+        self.model = model
+        self.control = control
+        self.sol = None
+        self.x0 = x0
+        self.t_step = t_step
+        self.u_disc = []
+        self.n0 = 0
+
+    def get_sol(self, n) :
+        # print(n, self.n0, len(self.sol))
+        # print(len(self.sol))
+        return self.sol[n - self.n0]
+    def t_max (self) :
+        if self.sol is None :
+            return -1
+        elif self.t_step is None :
+            return self.sol.t_max
+        else :
+            return len(self.sol) * self.t_step
+    
+    def integrate (self, t_span, method='RK45') :
+        if self.t_step is None and method == 'euler' :
+            Exception(f'Calling {method} method without t_step')
+        elif self.t_step is not None and method != 'euler' :
+            Exception(f'Calling {method} method with t_step')
+
+        x0 = self(t_span[0])
+
+        self.control.step(t_span[0],x0)
+        self.u_disc.append(self.control.u_calc)
+
+        if method == 'euler' :
+            if self.sol is None:
+                self.sol = [self.x0]
+            # print(t_span[0]/self.t_step, t_span[1]/self.t_step)
+            # print(round(t_span[0]/self.t_step),round(t_span[1]/self.t_step))
+            for n in range(round(t_span[0]/self.t_step),round(t_span[1]/self.t_step)):
+                # print(n)
+                self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
+
+        else :
+            ret = solve_ivp(self.model.func_, t_span, x0,
+                            method, dense_output=True)
+            if self.sol is None :
+                self.sol = ret.sol
+            else :
+                self.sol = OdeSolution(np.append(self.sol.ts, ret.sol.ts[1:]),
+                                    (self.sol.interpolants + ret.sol.interpolants))
+    
+    def _call_single(self, t):
+        if self.sol is not None:
+            if self.t_step is None and t <= self.t_max() :
+                return self.sol(t)
+            elif self.t_step is not None and t < len(self.sol) :
+                # print(t,self.t_step)
+                return self.get_sol(int(t/self.t_step))
+        
+        return self.x0
+
+    def __call__ (self, t) :
+        t = np.asarray(t)
+        if t.ndim == 0:
+            return self._call_single(t)
+
+        return self.sol(t) if self.t_step is None \
+                else np.asarray(self.sol)[(t/self.t_step).astype(int)].T
 
 class Partition :
-    def __init__(self, x_xh=None, x_xh_t=None, u_uh_t=None, tt=None) :
-        if x_xh is None and x_xh_t is None :
-            Exception('Need to define x_xh or x_xh_t')
+    _id = 0
 
-        self.x_xh = x_xh
-        self.x_xh_t = x_xh_t
-        if x_xh is None and x_xh_t is not None :
-            self.x_xh = x_xh_t[:,-1]
-        
-        self.u_uh_t = u_uh_t
-        self.tt = tt if tt is not None else 0
+    def __init__(self, x_xh0:ArrayLike, model,
+                 control_if:ControlInclusionFunction, primer:bool, 
+                 disturbance_if:DisturbanceInclusionFunction,
+                 t_step:float=None, primer_depth:int=0, depth:int=0, n0:int=0) -> None:
+        # super().__init__([t0,t0],[x_xh0,x_xh0])
+        self.model = model
+        self.control_if = control_if
+        self.primer = primer
+        self.disturbance_if = disturbance_if
+        self.subpartitions = None
+        # self.growth_event.terminal = True
+        self.sol = None
+        self.x_xh0 = x_xh0
+        self.n = len(x_xh0) // 2
+        self.t_step = t_step
+        self.depth = depth
+        self.primer_depth = primer_depth
+        self.n0 = n0
+        self._id = Partition._id
+        Partition._id += 1
     
-    def sg_box (self, xi=0, yi=1) :
-        h = len(self.x_xh) // 2
-        Xl, Yl, Xu, Yu = \
-            self.x_xh[xi],   self.x_xh[yi], \
-            self.x_xh[xi+h], self.x_xh[yi+h]
-        return sg.box(Xl,Yl,Xu,Yu)
+    def get_sol(self, n) :
+        try :
+            return self.sol[n - self.n0]
+        except Exception as e :
+            print(n, self.n0)
+            print(len(self.sol), self.depth, self.subpartitions)
+            print(self.sol)
+            a
+            # print_tb(e.__traceback__)
+            sys.exit(1)
 
-    def rect_patch (self, xi=0, yi=1) :
-        h = len(self.x_xh) // 2
-        Xl, Yl, Xu, Yu = \
-            self.x_xh[xi],   self.x_xh[yi], \
-            self.x_xh[xi+h], self.x_xh[yi+h]
-        return Rectangle((Xl,Yl),(Xu-Xl),(Yu-Yl), linewidth=0, alpha=0.2)
 
-    def draw_rect(self, ax:plt.Axes, xi=0, yi=1) :
-        h = len(self.x_xh) // 2
-        Xl, Yl, Xu, Yu = \
-            self.x_xh[xi],   self.x_xh[yi], \
-            self.x_xh[xi+h], self.x_xh[yi+h]
-        ax.add_patch(Rectangle((Xl,Yl),(Xu-Xl),(Yu-Yl), linewidth=0, alpha=0.2))
+    def growth_event (self, t, x_xht) :
+        return 1
     
-    def draw_cube(self, ax:plt.Axes, xi=0, yi=1, zi=2) :
-        h = len(self.x_xh) // 2
-        Xl, Yl, Zl, Xu, Yu, Zu = \
-            self.x_xh[xi],   self.x_xh[yi],   self.x_xh[zi],\
-            self.x_xh[xi+h], self.x_xh[yi+h], self.x_xh[zi+h]
-
-    def full_partition (self) :
-        parts = []
-        len_x = len(self.x_xh) // 2
-        part_avg = (self.x_xh[:len_x] + self.x_xh[len_x:]) / 2
-
-        for part_i in range(2**len_x) :
-            part = np.copy(self.x_xh)
-            for ind in range (len_x) :
-                part[ind + len_x*((part_i >> ind) % 2)] = part_avg[ind]
-            parts.append(Partition(x_xh=part,x_xh_t=self.x_xh_t))
-        return parts
-    
-    def __repr__(self) -> str:
-        return self.x_xh.__repr__()
-
-class ControlPartition (Partition):
-    def __init__(self, x_xh=None, x_xh_t=None, u_uh_t=None, tt=None, integral_partitions=None):
-        super().__init__(x_xh, x_xh_t, u_uh_t, tt)
-        self.integral_partitions = integral_partitions
-
-    def add_integral_partition (self, partition):
-        if self.integral_partitions is None :
-            self.integral_partitions = []
-        self.integral_partitions.append(partition)
-
-    def create_integral_partitions(self, num_divisions=1):
-        for div in range(num_divisions) :
-            if self.integral_partitions is None :
-                self.integral_partitions = self.full_partition()
-            else:
-                ip_i = 0
-                while ip_i < len(self.integral_partitions) :
-                    parts = self.integral_partitions[ip_i].full_partition()
-                    del self.integral_partitions[ip_i]
-                    self.integral_partitions[ip_i:ip_i] = parts
-                    ip_i += len(parts)
-
-    def full_partition (self) :
-        parts = []
-        len_x = len(self.x_xh) // 2
-        part_avg = (self.x_xh[:len_x] + self.x_xh[len_x:]) / 2
-
-        for part_i in range(2**len_x) :
-            part = np.copy(self.x_xh)
-            for ind in range (len_x) :
-                part[ind + len_x*((part_i >> ind) % 2)] = part_avg[ind]
-            parts.append(ControlPartition(x_xh=part,x_xh_t=self.x_xh_t))
-        return parts
-    
-    def get_bounding_box(self) :
-        if self.integral_partitions is None :
-            return np.copy(self.x_xh)
+    def t_min (self) :
+        if self.sol is None :
+            return -1
+        elif self.t_step is None :
+            return self.sol.t_min
         else :
-            allx_xh = np.array([np.copy(ip.x_xh) for ip in self.integral_partitions])
-            len_x = allx_xh.shape[1] // 2
-            min_x = np.min(allx_xh[:,:len_x], axis=0)
-            max_xh = np.max(allx_xh[:,len_x:], axis=0)
-            return np.concatenate((min_x, max_xh))
-            # for idx,ip in enumerate(self.integral_partitions) :
-            #     len_x = len(ip.x_xh) // 2
-            #     if idx == 0 :
-            #         min_x, max_xh = np.copy(ip.x_xh[:len_x]), np.copy(ip.x_xh[len_x:])
-            #     else :
-            #         x, xh = ip.x_xh[:len_x], ip.x_xh[len_x:]
-            #         for j in range(len(x)) :
-            #             if x[j] < min_x[j] :
-            #                 min_x[j] = np.copy(x[j])
-            #             if xh[j] > max_xh[j] :
-            #                 max_xh[j] = np.copy(xh[j])
-            # return np.concatenate((min_x,max_xh))
-
-    def get_bounding_box_t (self) :
-        if self.integral_partitions is None :
-            if self.x_xh_t is None :
-                return np.copy(self.x_xh.reshape(-1,1))
-            return np.copy(self.x_xh_t)
+            return self.n0 * self.t_step
+    def t_max (self) :
+        if self.sol is None :
+            return -1
+        elif self.t_step is None :
+            return self.sol.t_max
         else :
-            allx_xh_t = np.array([np.copy(ip.x_xh_t) for ip in self.integral_partitions])
-            len_x = allx_xh_t.shape[1] // 2
-            min_x = np.min(allx_xh_t[:,:len_x,:], axis=0)
-            max_xh = np.max(allx_xh_t[:,len_x:,:], axis=0)
-            return np.concatenate((min_x, max_xh))
-            
-    def sg_boxes (self, xi=0, yi=1) :
-        boxes = []
-        if self.integral_partitions is None :
-            boxes.append(self.sg_box(xi, yi))
-        else :
-            for ip in self.integral_partitions :
-                boxes.append(ip.sg_box(xi, yi))
-        return boxes
-
-    def rect_patchs (self, xi=0, yi=1) :
-        patches = []
-        if self.integral_partitions is None :
-            patches.append(self.rect_patch(xi, yi))
-        else :
-            for ip in self.integral_partitions :
-                patches.append(ip.rect_patch(xi, yi))
-        return patches
-
-    def draw_rects (self, ax, xi=0, yi=1) :
-        if self.integral_partitions is None :
-            self.draw_rect(ax, xi, yi)
-        else :
-            for ip in self.integral_partitions :
-                ip.draw_rect(ax, xi, yi)
-
-    def __repr__(self) -> str:
-        if self.integral_partitions is None :
-            return self.x_xh.__repr__()
-        else :
-            return f'{self.x_xh.__repr__()} -> {self.integral_partitions}'
-
-class ReachableSet : 
-    def __init__(self, steps) :
-        self.steps = steps
-        self.partitions_i = [[] for s in range(steps)]
-
-    def add_control_partition(self, partition, i=0) :
-        self.partitions_i[i].append(partition)
-
-    def create_control_partitions(self, num_divisions=1, i=0):
-        for div in range(num_divisions) :
-            cp_i = 0
-            while cp_i < len(self.partitions_i[i]) :
-                parts = self.partitions_i[i][cp_i].full_partition()
-                del self.partitions_i[i][cp_i]
-                self.partitions_i[i][cp_i:cp_i] = parts
-                cp_i += len(parts)
-
-    def create_partitions(self, num_control_divisions=1, num_integral_divisions=0, i=0):
-        self.create_control_partitions(num_control_divisions, i)
-        for cp in self.partitions_i[i] :
-            cp.create_integral_partitions(num_integral_divisions)
+            return (len(self.sol) - 1 + self.n0) * self.t_step
     
-    def repartition (self, num_control_divisions=1, num_integral_divisions=0, i=0) :
-        bounding_x_xh = self.get_bounding_box(i)
-        del self.partitions_i[i][:]
-        self.add_control_partition(ControlPartition(x_xh=bounding_x_xh),i)
-        self.create_partitions(num_control_divisions, num_integral_divisions, i)
+    def integrate (self, t_span, method='RK45') :
+        if self.t_step is None and method == 'euler' :
+            Exception(f'Calling {method} method without t_step')
+        elif self.t_step is not None and method != 'euler' :
+            Exception(f'Calling {method} method with t_step')
 
-    def get_bounding_box (self,i) :
-        allx_xh = np.array([cp.get_bounding_box() for cp in self.partitions_i[i]])
-        len_x = allx_xh.shape[1] // 2
-        min_x = np.min(allx_xh[:,:len_x], axis=0)
-        max_xh = np.max(allx_xh[:,len_x:], axis=0)
-        return np.concatenate((min_x, max_xh))
+        x_xh0 = self(t_span[0])
+        if self.primer :
+            self.control_if.prime(x_xh0)
+
+        self.model.disturbance_if = self.disturbance_if
+
+        if self.subpartitions is None :
+            self.control_if.step(t_span[0],x_xh0)
+
+            if method == 'euler' :
+                if self.sol is None:
+                    self.sol = [self.x_xh0]
+                for n in range(round(t_span[0]/self.t_step),round(t_span[1]/self.t_step)):
+                    # self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
+                    if self.control_if.mode == 'disclti' :
+                        self.sol.append(self.model.func_(n*self.t_step, self.get_sol(n)))
+                    else :
+                        self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
+
+            else :
+                ret = solve_ivp(self.model.func_, t_span, x_xh0,
+                                method, dense_output=True)
+                if self.sol is None :
+                    self.sol = ret.sol
+                else :
+                    self.sol = OdeSolution(np.append(self.sol.ts, ret.sol.ts[1:]),
+                                        (self.sol.interpolants + ret.sol.interpolants))
+        else :
+            for subpart in self.subpartitions :
+                subpart.integrate(t_span, method)
     
-    def get_bounding_box_t (self, i) :
-        allx_xh_t = np.array([cp.get_bounding_box_t() for cp in self.partitions_i[i]])
-        len_x = allx_xh_t.shape[1] // 2
-        min_x = np.min(allx_xh_t[:,:len_x,:], axis=0)
-        max_xh = np.max(allx_xh_t[:,len_x:,:], axis=0)
-        return np.concatenate((min_x, max_xh))
+    def integrate_eps (self, t_span, method='euler', eps=5, max_primer_depth=1, max_depth=2, check_contr=0.5, cut_dist=False):
+        if self.t_step is None and method == 'euler' :
+            Exception(f'Calling {method} method without t_step')
+        elif self.t_step is not None and method != 'euler' :
+            Exception(f'Calling {method} method with t_step')
+
+        x_xh0 = self(t_span[0])
+        if self.primer :
+            self.control_if.prime(x_xh0)
+
+        self.model.disturbance_if = self.disturbance_if
+
+        if self.subpartitions is None :
+            self.control_if.step(t_span[0],x_xh0)
+
+            if method == 'euler' :
+                if self.sol is None:
+                    self.sol = [self.x_xh0]
+                
+                n0 = round(t_span[0]/self.t_step)
+                nf = round(t_span[1]/self.t_step)
+                olen = len(self.sol)
+                for n in range(n0,nf):
+                    if self.control_if.mode == 'disclti' :
+                        self.sol.append(self.model.func_(n*self.t_step, self.get_sol(n)))
+                    else :
+                        self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
+
+                    
+                    if self.depth < max_depth and n >= n0 + round(check_contr*(nf-n0)) :
+                        wt0 = width(self.get_sol(n), eps); mwt0 = np.max(wt0)
+                        wtm = width(self.sol[-1], eps); mwtm = np.max(wtm)
+                        C = mwtm / mwt0
+                        mwtf = (C**((nf-(n+1))/((n+1)-n0))) * mwtm
+                        if mwtf > 1 :
+                            # print(mwtf, mwtm, mwt0)
+                            # print(f'cutting from depth {self.depth}')
+                            # print(C,mwtf, nf,n)
+                            # self.sol = self.sol[:(n0+1 - self.n0)]
+                            self.sol = self.sol[:olen]
+                            # print(len(self.sol))
+                            sub_primer = self.primer_depth < max_primer_depth
+                            if sub_primer and self.primer :
+                                self.primer = False
+                            self.cut_all((self.primer_depth < max_primer_depth), cut_dist, n0)
+                            
+                            self.integrate_eps(t_span,method,eps,max_primer_depth,max_depth,check_contr,cut_dist)
+                            return
+
+            else :
+                ret = solve_ivp(self.model.func_, t_span, x_xh0,
+                                method, dense_output=True)
+                if self.sol is None :
+                    self.sol = ret.sol
+                else :
+                    self.sol = OdeSolution(np.append(self.sol.ts, ret.sol.ts[1:]),
+                                        (self.sol.interpolants + ret.sol.interpolants))
+        else :
+            for subpart in self.subpartitions :
+                subpart.integrate_eps(t_span, method, eps, max_primer_depth, max_depth, check_contr, cut_dist)
     
-    def sg_bounding_box (self, i, xi=0, yi=1) :
-        x_xh = self.get_bounding_box(i)
-        h = len(x_xh) // 2
-        Xl, Yl, Xu, Yu = \
-            x_xh[xi],   x_xh[yi], \
-            x_xh[xi+h], x_xh[yi+h]
-        return sg.box(Xl,Yl,Xu,Yu)
+    def cut (self, i, primer:bool = False) :
+        if self.subpartitions is None :
+            Exception('trying to cut something with subpartitions')
+        self.subpartitions = []
+        avg = (self.x_xh[i] + self.x_xh[i]) / 2
+        part1 = np.copy(self.x_xh); part1[i] = avg
+        part2 = np.copy(self.x_xh); part2[i + self.n] = avg
+        self.subpartitions.append(Partition(part1, self.d, self.control_if, primer, self.t_step))
+        self.subpartitions.append(Partition(part2, self.d, self.control_if, primer, self.t_step))
+
+    def cut_all (self, primer:bool = False, cut_dist:bool = False, n0:int=0) :
+        if self.subpartitions is None :
+            self.subpartitions = []
+            x_xh = self.x_xh0 if self.sol is None else self.sol[-1]
+            part_avg = (x_xh[:self.n] + x_xh[self.n:]) / 2
+
+            primer_depth = self.primer_depth + 1 if primer else self.primer_depth
+
+            if cut_dist :
+                dist_parts = self.disturbance_if.cut_all()
+            else :
+                dist_parts = [self.disturbance_if]
+
+            for part_i in range(2**self.n) :
+                part = np.copy(x_xh)
+                for ind in range (self.n) :
+                    part[ind + self.n*((part_i >> ind) % 2)] = part_avg[ind]
+                for dist_part in dist_parts :
+                    self.subpartitions.append(Partition(part, self.model, self.control_if, primer, dist_part, self.t_step, primer_depth, self.depth+1, n0))
+        else :
+            for part in self.subpartitions :
+                part.cut_all(primer,cut_dist,n0)
     
-    def draw_sg_boxes (self, ax, xi=0, yi=1, color='tab:blue') :
-        for i in range(len(self.partitions_i)) :
+    def repartition (self,t) :
+        if self.subpartitions is not None:
+            # x_xh = self.x_xh0 if self.sol is None else self.sol[-1]
+            x_xh = self(t)
+            # print('t_max: ', self.t_max())
+            part_avg = (x_xh[:self.n] + x_xh[self.n:]) / 2
+
+            for part_i in range(2**self.n) :
+                part = np.copy(x_xh)
+                for ind in range (self.n) :
+                    part[ind + self.n*((part_i >> ind) % 2)] = part_avg[ind]
+                # print('subparts.sol')
+                # print(self.subpartitions[part_i])
+                # print(self.subpartitions[part_i].sol)
+                if self.subpartitions[part_i].sol is None :
+                    self.subpartitions[part_i].x_xh0 = part
+                else :
+                    self.subpartitions[part_i].sol[-1] = part
+
+            for part in self.subpartitions :
+                # part.cut_all(primer,cut_dist,len(self.sol)-1)
+                part.repartition(t)
+
+    
+    def sg_boxes (self, t, xi=0, yi=1, T=None) :
+        if self.subpartitions is not None and (t >= self.t_max()) :
             boxes = []
-            for cp in self.partitions_i[i] :
-                boxes[-1:-1] = cp.sg_boxes(xi, yi)
+            for subpart in self.subpartitions :
+                boxes.extend(subpart.sg_boxes(t,xi,yi,T))
+            return boxes
+
+        if self.sol is not None:
+            if self.t_step is None and t <= self.t_max() :
+                bb = self.sol(t)
+                if T is not None :
+                    bb = d_positive(T) @ bb
+                return [sg_box(bb,xi,yi)]
+            elif self.t_step is not None and t <= self.t_max() :
+                bb = self.get_sol(round(t/self.t_step))
+                if T is not None :
+                    bb = d_positive(T) @ bb
+                return [sg_box(bb,xi,yi)]
+
+        
+        return self.x_xh0
+    
+    def draw_sg_boxes (self, ax, tt, xi=0, yi=1, color='tab:blue', T=None, draw_bb=False) :
+        tt = np.asarray(tt)
+        
+        for t in tt :
+            boxes = self.sg_boxes(t, xi, yi, T)
             shape = so.unary_union(boxes)
             xs, ys = shape.exterior.xy    
-            ax.fill(xs, ys, alpha=0.75, fc='none', ec=color)
-            xsb, ysb = self.sg_bounding_box(i).exterior.xy
-            ax.fill(xsb, ysb, alpha=0.5, fc='none', ec=color, linestyle='--')
+            ax.fill(xs, ys, alpha=1, fc='none', ec=color)
+            if draw_bb:
+                bb = self(t)
+                if T is not None:
+                    bb = d_positive(T) @ bb
+                xsb, ysb = sg_box(bb,xi,yi).exterior.xy
+                ax.fill(xsb, ysb, alpha=0.5, fc='none', ec=color, linestyle='--')
+
+    def area (self, t, xi=0, yi=1, T=None) :
+        boxes = self.sg_boxes(t, xi, yi, T)
+        shape = so.unary_union(boxes)
+        return shape.area
     
-    def draw_3d_boxes (self, ax, xi=0, yi=1, zi=2) :
-        for i in range(len(self.partitions_i)) :
-            x_xh = self.get_bounding_box(i)
-            h = len(x_xh) // 2
-            Xl, Yl, Zl, Xu, Yu, Zu = \
-                x_xh[xi],   x_xh[yi],   x_xh[zi],\
-                x_xh[xi+h], x_xh[yi+h], x_xh[zi+h]
-            faces = [ \
-                np.array([[Xl,Yl,Zl],[Xu,Yl,Zl],[Xu,Yu,Zl],[Xl,Yu,Zl],[Xl,Yl,Zl]]), \
-                np.array([[Xl,Yl,Zu],[Xu,Yl,Zu],[Xu,Yu,Zu],[Xl,Yu,Zu],[Xl,Yl,Zu]]), \
-                np.array([[Xl,Yl,Zl],[Xu,Yl,Zl],[Xu,Yl,Zu],[Xl,Yl,Zu],[Xl,Yl,Zl]]), \
-                np.array([[Xl,Yu,Zl],[Xu,Yu,Zl],[Xu,Yu,Zu],[Xl,Yu,Zu],[Xl,Yu,Zl]]), \
-                np.array([[Xl,Yl,Zl],[Xl,Yu,Zl],[Xl,Yu,Zu],[Xl,Yl,Zu],[Xl,Yl,Zl]]), \
-                np.array([[Xu,Yl,Zl],[Xu,Yu,Zl],[Xu,Yu,Zu],[Xu,Yl,Zu],[Xu,Yl,Zl]]) ]
-            for face in faces :
-                ax.plot3D(face[:,0], face[:,1], face[:,2], color='tab:blue', alpha=0.75, lw=0.75)
+    def width(self, scale=None):
+        return width(self.interpolants[-1], scale)
 
-    def plot_bounds_xy (self, ax, xi=0, yi=1, color='tab:blue') :
-        x_xh_t = np.concatenate([self.get_bounding_box_t(i) for i in range(len(self.partitions_i))],axis=1)
-        len_x = x_xh_t.shape[0] // 2
-        ax.plot(x_xh_t[xi,:-1],x_xh_t[yi,:-1], color=color, linestyle='--')
-        ax.plot(x_xh_t[xi+len_x,:-1],x_xh_t[yi+len_x,:-1], color=color, linestyle='--')
+    def get_max_depth (self, t=None) :
+        if self.subpartitions is None :
+            if t is None or t >= self.t_min() :
+                return self.depth 
+            else :
+                return -1
+        else :
+            depths = [p.get_max_depth(t) for p in self.subpartitions]
+            depths.append(self.depth)
+            return max(depths)
+    
+    def get_max_primer_depth(self) :
+        if self.subpartitions is None :
+            return self.primer_depth
+        else :
+            return max([p.get_max_primer_depth() for p in self.subpartitions])
+    
+    def get_tree (self) :
+        if self.subpartitions is None :
+            return None
+        else :
+            edges = [(self._id, s._id) for s in self.subpartitions]
+            # colors = [('tab:blue' if self.primer else 'none', 'tab:blue' if s.primer else 'none') for s in self.subpartitions]
+            colors = ['tab:blue' if s.primer else 'none' for s in self.subpartitions]
+            # colors = ['tab:blue' if self.primer else 'none']
+            edges.extend(chain.from_iterable([y[0] for s in self.subpartitions if (y := s.get_tree()) is not None]))
+            colors.extend(chain.from_iterable([y[1] for s in self.subpartitions if (y := s.get_tree()) is not None]))
+            return edges, colors
 
-    def plot_bounds_t (self, ax, state, color='C0', label=None) :
-        x_xh_t = np.concatenate([self.get_bounding_box_t(i) for i in range(len(self.partitions_i))],axis=1)
-        tt = np.concatenate([np.atleast_1d(self.partitions_i[i][0].tt) for i in range(len(self.partitions_i))])
-        len_x = x_xh_t.shape[0] // 2
-        # ax.plot(tt[:-1], x_xh_t[state,:-1], alpha=0.75, linewidth=0.5, color=color)
-        # ax.plot(tt[:-1], x_xh_t[state+len_x,:-1], alpha=0.75, linewidth=0.5, color=color)
-        ax.fill_between(tt[:-1], x_xh_t[state,:-1], x_xh_t[state+len_x,:-1], alpha=1, color=color, label=label)
+    def draw_tree (self, ax, prog="twopi", args="") :
+        # print(self.get_tree())
+        G = nx.Graph()
+        tree, colors = self.get_tree()
+        colors.insert(0,'none')
+        print(len(tree))
+        if tree is not None: 
+            G.add_edges_from(tree)
+            print(G)
+            root = min([a for (a,b) in tree])
+            pos = nx.nx_agraph.graphviz_layout(G, prog=prog, root=root, args=args)
+            node_collection = nx.draw_networkx_nodes(G, pos, ax=ax, node_size=75, node_color=colors, linewidths=2, edgecolors='black')
+            node_collection.set_zorder(2)
+            edge_collection = nx.draw_networkx_edges(G, pos, ax=ax)
+            edge_collection.set_zorder(2)
+            ax.set_axis_off()
 
-    # def draw_all_rects (self, ax, xi=0, yi=1):
-    #     patches = []
-    #     for i in range(len(self.partitions_i)) :
-    #         for cp in self.partitions_i[i] :
-    #             patches[-1:-1] = cp.rect_patchs(xi, yi)
-    #     ax.add_collection(PatchCollection(patches, linewidths=0, facecolors=[0,0,1,0.2]))
 
-    # def draw_all_rects (self, ax, xi=0, yi=1):
-    #     for i in range(len(self.partitions_i)) :
-    #         self.draw_rects(ax, i, xi, yi)
+    def _call_single(self, t):
+        # if self.subpartitions is not None :
+        #     x_xht2_parts = np.array([subpart(t) 
+        #                             for subpart in self.subpartitions])
+        #     # n = x_xht2_parts.shape[1] // 2
+        #     xt2_min  = np.min(x_xht2_parts[:,:self.n], axis=0)
+        #     xht2_max = np.max(x_xht2_parts[:,self.n:], axis=0)
+        #     return np.concatenate((xt2_min,xht2_max))
+        
+        # if self.sol is not None:
+        #     if self.t_step is None and t <= self.t_max() :
+        #         return self.sol(t)
+        #     elif self.t_step is not None and t <= self.t_max() :
+        #         return self.get_sol(round(t/self.t_step))
 
-    # def draw_rects (self, ax, i=-1, xi=0, yi=1) :
-    #     for cp in self.partitions_i[i] :
-    #         cp.draw_rects(ax)
+        if self.sol is not None and t <= self.t_max() :
+            return self.sol(t) if self.t_step is None \
+                    else self.get_sol(round(t/self.t_step))
+        elif self.subpartitions is not None :
+            x_xht_parts = np.array([subpart(t) for subpart in self.subpartitions])
+            n = x_xht_parts.shape[1] // 2
+            xt2_min  = np.min(x_xht_parts[:,:n], axis=0)
+            xht2_max = np.max(x_xht_parts[:,n:], axis=0)
+            x_xht = np.concatenate((xt2_min,xht2_max))
+            return x_xht
 
-    def printall(self) :
-        str = ''
-        for step in range(self.steps) :
-            str += f'Step {step}\n'
-            str += self.partitions_i[step].__repr__() + '\n'
-        return str
-    def print(self) :
-        print(self)
-    def __repr__(self) :
-        str = ''
-        for cp in self.partitions_i[-1] :
-            str += cp.__repr__() + '\n'
-        return str
+        return self.x_xh0
 
-# r = ReachableSet(1)
-# cp = ControlPartition(x_xh=np.array([1,3,2,4],dtype=np.float64))
-# r.add_control_partition(cp)
-# # r.partitions_i[0][0].create_integral_partitions(1)
-# r.create_partitions(1,1)
-# print(r)
+    def __call__ (self, t) :
+        t = np.asarray(t)
+        if t.ndim == 0:
+            return self._call_single(t)
+            # return self([t])[0]
 
+        if self.subpartitions is None :
+            return self.sol(t) if self.t_step is None \
+                    else np.asarray(self.sol)[np.round(t/self.t_step).astype(int) - self.n0].T
+        else :
+            # print(t[t < int(self.t_max()/self.t_step)])
+            if self.sol is not None:
+                x_xht1 = self.sol(t[t <= self.t_max()]) if self.t_step is None  \
+                        else np.asarray(self.sol)[np.round(t[t <= self.t_max()]/self.t_step).astype(int) - self.n0].T
+            else :
+                x_xht1 = None
+            x_xht2_parts = np.array([subpart(t[t > self.t_max()]) 
+                                    for subpart in self.subpartitions])
+            n = x_xht2_parts.shape[1] // 2
+            xt2_min  = np.min(x_xht2_parts[:,:n,:], axis=0)
+            xht2_max = np.max(x_xht2_parts[:,n:,:], axis=0)
+            x_xht2 = np.concatenate((xt2_min,xht2_max))
+            return x_xht2 if x_xht1 is None else np.hstack((x_xht1, x_xht2))

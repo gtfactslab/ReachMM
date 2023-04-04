@@ -5,3 +5,4 @@ from .reach import *
 from .neural import *
 # Usage: from ReachMM.decomp import d_sin
 from . import decomp 
+from . import utils
