@@ -3,7 +3,7 @@ from numpy import tan, arctan2, arctan
 from time import time
 from ReachMM import MixedMonotoneModel, ControlFunction, ControlInclusionFunction
 from ReachMM import DisturbanceFunction, DisturbanceInclusionFunction
-from ReachMM.decomp import d_sin, d_cos, d_b1b2
+from ReachMM.decomp import d_sin, d_cos, d_b1b2, d_metzler, d_positive
 from casadi import *
 
 '''
@@ -28,6 +28,9 @@ class VehicleModel (MixedMonotoneModel):
         self.lr = lr
         self.u_step = u_step
 
+        if control_if.mode == 'ltv' :
+            control_if.get_ABc = self.get_ABc
+
     def f(self, x, u, w) :
         u1, u2 = u
         X, Y, psi, v = x.ravel()
@@ -39,40 +42,93 @@ class VehicleModel (MixedMonotoneModel):
         xdot = np.array([dX, dY, dpsi, dv])
         return xdot
     
+    # def d(self, x, xh, u, uh, w, wh) :
+    #     u1, u2 = u
+    #     u1h, u2h = uh
+    #     X, Y, psi, v = x.ravel()
+    #     Xh, Yh, psih, vh = xh.ravel()
+    #     beta = arctan2((self.lr * tan(u2)),(self.lf + self.lr))
+    #     betah = arctan2((self.lr * tan(u2h)),(self.lf + self.lr))
+    #     dX = d_b1b2( [v , d_cos(psi + beta, psih + betah)], 
+    #                  [vh, d_cos(psih + betah, psi + beta)])
+    #     dY = d_b1b2( [v , d_sin(psi + beta, psih + betah)], 
+    #                  [vh, d_sin(psih + betah, psi + beta)])
+    #     dpsi = d_b1b2( [v , d_sin(beta, betah)],
+    #                    [vh, d_sin(betah, beta)])
+    #     dv = u1
+    #     xdot = np.array([dX, dY, dpsi, dv])
+    #     return xdot
+
     def d(self, x, xh, u, uh, w, wh) :
-        u1, u2 = u
-        u1h, u2h = uh
-        X, Y, psi, v = x.ravel()
-        Xh, Yh, psih, vh = xh.ravel()
-        beta = arctan2((self.lr * tan(u2)),(self.lf + self.lr))
-        betah = arctan2((self.lr * tan(u2h)),(self.lf + self.lr))
-        dX = d_b1b2( [v , d_cos(psi + beta, psih + betah)], 
-                     [vh, d_cos(psih + betah, psi + beta)])
-        dY = d_b1b2( [v , d_sin(psi + beta, psih + betah)], 
-                     [vh, d_sin(psih + betah, psi + beta)])
-        dpsi = d_b1b2( [v , d_sin(beta, betah)],
-                       [vh, d_sin(betah, beta)])
-        dv = u1
-        xdot = np.array([dX, dY, dpsi, dv])
-        return xdot
+        xcent = (x + xh)/2
+        ucent = self.control(0,xcent)
+        A, B, c = self.get_ABc(xcent)
+        Am, An = d_metzler(A, True)
+        Bp, Bn = d_positive(B, True)
+
+        return Am@x + An@xh + Bp@u + Bn@uh - (A@xcent + B@ucent - self.f(xcent, ucent, 0))
+        # if x[0] < xh[0] :
+        #     return Am@x + An@xh + Bp@u + Bn@uh - (A@xcent + B@ucent - self.f(xcent, ucent, 0))
+        # else :
+        #     return An@x + Am@xh + Bn@u + Bp@uh - (A@xcent + B@ucent - self.f(xcent, ucent, 0))
     
-    def d_i(self, i, x, xh, u, uh, w, wh) :
-        # u[0], u[1] = u
-        if i == 3:
-            return u[0]
-        # u1h, uhat[1] = uhat
-        # X, Y, x[2], x[3] = x
-        # Xh, Yh, xhat[2], xhat[3] = xhat
-        beta = arctan((self.lr * tan(u[1]))/(self.lf + self.lr))
-        betah = arctan((self.lr * tan(uh[1]))/(self.lf + self.lr))
-        if i == 0:
-            return d_b1b2( (x[3] , d_cos(x[2] + beta, xh[2] + betah)), 
-                        (xh[3], d_cos(xh[2] + betah, x[2] + beta)))
-        if i == 1:
-            return d_b1b2((x[3] , d_sin(x[2] + beta, xh[2] + betah)), 
-                        (xh[3], d_sin(xh[2] + betah, x[2] + beta)))
-        return d_b1b2( (x[3] , d_sin(beta, betah)),
-                    (xh[3], d_sin(betah, beta)))
+    # def d_i(self, i, x, xh, u, uh, w, wh) :
+    #     # u[0], u[1] = u
+    #     if i == 3:
+    #         return u[0]
+    #     # u1h, uhat[1] = uhat
+    #     # X, Y, x[2], x[3] = x
+    #     # Xh, Yh, xhat[2], xhat[3] = xhat
+    #     # beta = arctan((self.lr * tan(u[1]))/(self.lf + self.lr))
+    #     # betah = arctan((self.lr * tan(uh[1]))/(self.lf + self.lr))
+    #     beta = arctan2((self.lr * tan(u[1])),(self.lf + self.lr))
+    #     betah = arctan2((self.lr * tan(uh[1])),(self.lf + self.lr))
+    #     if i == 0:
+    #         return d_b1b2( (x[3] , d_cos(x[2] + beta, xh[2] + betah)), 
+    #                     (xh[3], d_cos(xh[2] + betah, x[2] + beta)))
+    #     if i == 1:
+    #         return d_b1b2((x[3] , d_sin(x[2] + beta, xh[2] + betah)), 
+    #                     (xh[3], d_sin(xh[2] + betah, x[2] + beta)))
+    #     return d_b1b2( (x[3] , d_sin(beta, betah)),
+    #                 (xh[3], d_sin(betah, beta)))
+
+    def get_ABc (self, x) :
+        u = self.control(0, x)
+
+        X, Y, phi, v = x.ravel()
+        u1, u2 = u
+        tu2 = tan(u2)
+        beta = arctan2((self.lf * tu2),(self.lf + self.lr))
+        c = (self.lf/(self.lr + self.lf))
+        dbeta = (c*(1/(cos(u2)**2)))/(1 + (c*tu2)**2)
+
+        A = np.array([
+            # [0,0, -v*sin(phi + beta), cos(phi + beta)],
+            # [0,0,  v*cos(phi + beta), sin(phi + beta)],
+            # [0,0,0,(1/self.lr)*sin(beta)],
+            # [0,0,0,0]
+            [0, 0, -v*sin(phi + beta), cos(phi + beta)],
+            [0, 0,  v*cos(phi + beta), sin(phi + beta)],
+            [0, 0,                  0,  tu2/sqrt(tu2**2 + 4)],
+            [0, 0,                  0,                             0]
+        ])
+
+        B = np.array([
+            # [0, -v*sin(phi + beta)*dbeta],
+            # [0,  v*cos(phi + beta)*dbeta],
+            # [0, (v/self.lr)*cos(beta)*dbeta],
+            # [1, 0]
+            [0,                                 -2*v*(tu2**2 + 1)*sin(phi + atan2(tu2, 2))/(tu2**2 + 4)],
+            [0,                                  2*v*(tu2**2 + 1)*cos(phi + atan2(tu2, 2))/(tu2**2 + 4)],
+            [0, v*(tu2**2 + 1)/sqrt(tu2**2 + 4) - v*(2*tu2**2 + 2)*tu2**2/(2*(tu2**2 + 4)**(3/2))],
+            [1,                                                                                                0]
+        ])
+
+        dA = (np.eye(4) + self.u_step*A)
+        dB = self.u_step*B
+
+        return dA, dB, self.f(x, u, 0)
+        # return A, B, self.f(x, u, 0)
 
 class VehicleMPCController (ControlFunction) :
     def __init__(self, n_horizon=20, u_step=2.5e-1, euler_steps=10, lr=1, lf=1):
@@ -153,3 +209,62 @@ class VehicleMPCController (ControlFunction) :
         sol = self.opti.solve()
         # print(sol.value(self.slack))
         return sol.value(self.uu[:,0])
+
+class LinVehicleModel (MixedMonotoneModel) :
+    def __init__(self, control: ControlFunction = None, control_if: ControlInclusionFunction = None, u_step=2.5e-1, 
+                 lf=1, lr=1,
+                 disturbance: DisturbanceFunction = None, disturbance_if: DisturbanceInclusionFunction = None):
+        super().__init__(control, control_if, u_step, disturbance, disturbance_if)
+        self.lf = lf
+        self.lr = lr
+        self.u_step = u_step
+
+    def f (self, x, u, w) :
+        u1, u2 = u
+        X, Y, phi, v = x.ravel()
+        beta = arctan2((self.lf * tan(u2)),(self.lf + self.lr))
+        c = (self.lf/(self.lr + self.lf))
+        dbeta = (c*(1/(cos(u2)**2)))/(1 + (c*tan(u2))**2)
+
+        A = np.array([
+            [0,0, -v*sin(phi + beta), cos(phi + beta)],
+            [0,0,  v*cos(phi + beta), sin(phi + beta)],
+            [0,0,0,(1/self.lr)*sin(beta)],
+            [0,0,0,0]
+        ])
+
+        B = np.array([
+            [0, -v*sin(phi + beta)*dbeta],
+            [0,  v*cos(phi + beta)*dbeta],
+            [0, (v/self.lr)*cos(beta)*dbeta],
+            [1, 0]
+        ])
+
+        return A@x + B@u
+    
+    def get_AB (self, _x, x_, _u, u_, _w, w_) :
+        x = (_x + x_) / 2
+        u = (_u + u_) / 2
+
+        X, Y, phi, v = x.ravel()
+        u1, u2 = u
+        beta = arctan2((self.lf * tan(u2)),(self.lf + self.lr))
+        c = (self.lf/(self.lr + self.lf))
+        dbeta = (c*(1/(cos(u2)**2)))/(1 + (c*tan(u2))**2)
+
+        A = np.array([
+            [0,0, -v*sin(phi + beta), cos(phi + beta)],
+            [0,0,  v*cos(phi + beta), sin(phi + beta)],
+            [0,0,0,(1/self.lr)*sin(beta)],
+            [0,0,0,0]
+        ])
+
+        B = np.array([
+            [0, -v*sin(phi + beta)*dbeta],
+            [0,  v*cos(phi + beta)*dbeta],
+            [0, (v/self.lr)*cos(beta)*dbeta],
+            [1, 0]
+        ])
+
+        return A, B
+

@@ -182,7 +182,7 @@ class Partition :
                     self.sol = [self.x_xh0]
                 for n in range(round(t_span[0]/self.t_step),round(t_span[1]/self.t_step)):
                     # self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
-                    if self.control_if.mode == 'disclti' :
+                    if self.control_if.mode == 'disclti' or self.control_if.mode == 'ltv' :
                         self.sol.append(self.model.func_(n*self.t_step, self.get_sol(n)))
                     else :
                         self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))

@@ -1,12 +1,14 @@
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.autograd.functional import jacobian
 from torch.utils.data import Dataset
 from ReachMM.control import *
 from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
 from collections import defaultdict
 import os
 from ReachMM.decomp import d_metzler, d_positive
+
 
 class NeuralNetwork (nn.Module) :
     def __init__(self, dir=None, load=True, device='cpu') :
@@ -146,6 +148,7 @@ class NeuralNetworkControlIF (ControlInclusionFunction) :
         self.x_len = nn[0].in_features if x_len is None else x_len
         self.global_input = torch.zeros([1,self.x_len], dtype=torch.float32)
         self.st = st
+        self.nn = nn
         self.bnn = BoundedModule(nn, self.global_input, bound_opts, device, verbose, custom_ops)
         # self.global_input = global_input
         self.method = method
@@ -163,16 +166,18 @@ class NeuralNetworkControlIF (ControlInclusionFunction) :
         self.u_lb = None
         self.u_ub = None
         
-        # disclti mode
-        if mode == 'disclti' :
+        # disclti, ltv mode
+        if mode == 'disclti' or mode == 'ltv' :
             self.A = None
             self.B = None
             self.Bp = None
             self.Bn = None
+            self.c = None
             self._Mm = None
             self._Mn = None
             self.M_m = None
             self.M_n = None
+            self.get_ABc = None
     
     def state_transform (self, x_xh, to='numpy') :
         h = len(x_xh) // 2
@@ -213,13 +218,24 @@ class NeuralNetworkControlIF (ControlInclusionFunction) :
         # self.C_n = np.clip(self.C_,-np.inf, 0)
         self._Cp, self._Cn = d_positive(self._C, True)
         self.C_p, self.C_n = d_positive(self.C_, True)
-        if self.mode == 'disclti' :
+        if self.mode == 'disclti' or self.mode == 'ltv' :
             # print(self.A.shape)
             # print(self.Bp.shape)
             # print(self._Cp.shape)
             # print(self._Cp[0,:])
+            if self.mode == 'ltv' :
+                self.A, self.B, self.c = self.get_ABc((x_xh[:h] + x_xh[h:])/2)
+                self.Bp, self.Bn = d_positive(self.B, True)
             self._Mm, self._Mn = d_positive((self.A + self.Bp@self._C + self.Bn@self.C_), True)
             self.M_m, self.M_n = d_positive((self.A + self.Bp@self.C_ + self.Bn@self._C), True)
+
+            J = jacobian(self.nn, torch.Tensor((x_xh[:h] + x_xh[h:])/2)).cpu().detach().numpy()
+            Acl = self.A + self.B@J
+            L, V  = np.linalg.eig(Acl)
+            # print(self.A + self.B@J)
+            # print(np.abs(L))
+            print(np.max(np.sum(np.abs(Acl),axis=1)))
+            # print(Acl)
     
     def u (self, t, x_xh) :
         h, x, xh = self.state_transform(x_xh, to='numpy')

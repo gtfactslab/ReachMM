@@ -16,11 +16,12 @@ R = np.array([ [0.5,0], [0,0.5] ])
 
 K, S, E = lqr(A, B, Q, R)
 
-# control = XYDoubleIntegratorMPC()
 net = NeuralNetwork('models/100r100r2')
+# control = VehicleMPCController()
 control = NeuralNetworkControl(net)
 # control = LinearControl(-K)
-model = VehicleModel(control)
+# model = VehicleModel(control)
+model = LinVehicleModel(control)
 
 t_end = 20*0.25
 grain = 0.01

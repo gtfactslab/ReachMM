@@ -84,6 +84,32 @@ class MixedMonotoneModel :
                         self.control_if.Bn @ self.control_if._d.reshape(-1) + \
                         self.control_if.Bp @ self.control_if.d_.reshape(-1) + \
                         self.c
+            elif self.control_if.mode == 'ltv' :
+                xcent = (x + xh) / 2
+                ucent = self.control(0,xcent)
+                # xdot  = self.control_if._Mm @ (x - xcent) + \
+                #         self.control_if._Mn @ (xh - xcent) + \
+                #         self.control_if.Bp @ self.control_if._d.reshape(-1) + \
+                #         self.control_if.Bn @ self.control_if.d_.reshape(-1) + \
+                #         (self.u_step*self.f(xcent, ucent, 0) + xcent)
+                # xhdot = self.control_if.M_m @ (xh - xcent) + \
+                #         self.control_if.M_n @ (x - xcent) + \
+                #         self.control_if.Bn @ self.control_if._d.reshape(-1) + \
+                #         self.control_if.Bp @ self.control_if.d_.reshape(-1) + \
+                #         (self.u_step*self.f(xcent, ucent, 0) + xcent)
+                xdot  = self.control_if._Mm @ x + \
+                        self.control_if._Mn @ xh + \
+                        self.control_if.Bp @ self.control_if._d.reshape(-1) + \
+                        self.control_if.Bn @ self.control_if.d_.reshape(-1) \
+                        - (self.control_if.A @ xcent + self.control_if.B @ ucent \
+                           - xcent - self.u_step*self.f(xcent, ucent, 0))
+                xhdot = self.control_if.M_m @ xh + \
+                        self.control_if.M_n @ x + \
+                        self.control_if.Bn @ self.control_if._d.reshape(-1) + \
+                        self.control_if.Bp @ self.control_if.d_.reshape(-1) \
+                        - (self.control_if.A @ xcent + self.control_if.B @ ucent \
+                           - xcent - self.u_step*self.f(xcent, ucent, 0))
+                        
             return np.concatenate((xdot,xhdot))
     
     def S (self, x0, x1) :
