@@ -63,10 +63,10 @@ class VehicleModel (MixedMonotoneModel):
         xcent = (x + xh)/2
         ucent = self.control(0,xcent)
         A, B, c = self.get_ABc(xcent)
-        Am, An = d_metzler(A, True)
+        Ap, An = d_positive(A, True)
         Bp, Bn = d_positive(B, True)
 
-        return Am@x + An@xh + Bp@u + Bn@uh - (A@xcent + B@ucent - self.f(xcent, ucent, 0))
+        return Ap@x + An@xh + Bp@u + Bn@uh - (A@xcent + B@ucent) + xcent + self.u_step*self.f(xcent, ucent, 0)
         # if x[0] < xh[0] :
         #     return Am@x + An@xh + Bp@u + Bn@uh - (A@xcent + B@ucent - self.f(xcent, ucent, 0))
         # else :

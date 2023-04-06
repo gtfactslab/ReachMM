@@ -185,7 +185,8 @@ class Partition :
                     if self.control_if.mode == 'disclti' or self.control_if.mode == 'ltv' :
                         self.sol.append(self.model.func_(n*self.t_step, self.get_sol(n)))
                     else :
-                        self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
+                        self.sol.append(self.model.func_(n*self.t_step, self.get_sol(n)))
+                        # self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
 
             else :
                 ret = solve_ivp(self.model.func_, t_span, x_xh0,

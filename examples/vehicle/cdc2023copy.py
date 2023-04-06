@@ -79,7 +79,7 @@ if EXPERIMENT == 1 :
     fig1.subplots_adjust(left=0.05, right=0.95, bottom=0.075, top=0.95, wspace=0.125, hspace=0.25)
 elif EXPERIMENT == 2 :
     experiments = ((
-                    ([0,0,0,0],0,0,1,0,0,0,False), 
+                    ([0,0,0,0],0,0,0,0,0,0,False), 
                     # ([0.2,0.2,np.inf,np.inf],1,2,0,0,0.1,0,False), 
                    ),)
     fig1, axs1 = plt.subplots(1,1,dpi=100,figsize=[5,5],squeeze=False)
