@@ -234,7 +234,7 @@ class NeuralNetworkControlIF (ControlInclusionFunction) :
             L, V  = np.linalg.eig(Acl)
             # print(self.A + self.B@J)
             # print(np.abs(L))
-            print(np.max(np.sum(np.abs(Acl),axis=1)))
+            # print(np.max(np.sum(np.abs(Acl),axis=1)))
             # print(Acl)
     
     def u (self, t, x_xh) :

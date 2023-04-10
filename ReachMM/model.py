@@ -8,6 +8,7 @@ from ReachMM import ControlFunction, ControlInclusionFunction
 from ReachMM import DisturbanceFunction, DisturbanceInclusionFunction
 from ReachMM import NoDisturbance, NoDisturbanceIF
 from ReachMM.decomp import d_positive, d_metzler
+from numba import jit
 
 class MixedMonotoneModel :
     def __init__ (self, control:ControlFunction=None, control_if:ControlInclusionFunction=None, u_step=None,

@@ -3,6 +3,8 @@ from ReachMM import MixedMonotoneModel
 from ReachMM import ControlFunction, ControlInclusionFunction
 from ReachMM import DisturbanceFunction, DisturbanceInclusionFunction
 from ReachMM.decomp import d_metzler, d_positive
+from numba import jit
+from numba import int32, float32
 
 '''
 x1d = x2 + 0.5u
@@ -10,6 +12,11 @@ x2d = u
 '''
 # x1+ = x1 + x2 + 0.5u
 # x2+ = x2 + u
+
+spec = [
+    ('value', int32),               # a simple scalar field
+    ('array', float32[:]),          # an array field
+]
 
 class DoubleIntegratorModel(MixedMonotoneModel) :
     def __init__(self, control: ControlFunction = None, control_if: ControlInclusionFunction = None, u_step=1, 
@@ -27,12 +34,18 @@ class DoubleIntegratorModel(MixedMonotoneModel) :
             control_if.B = self.B
             control_if.Bp, control_if.Bn = self.Bp, self.Bn
     
-    def f(self, x, u, w) :
+    @staticmethod
+    @jit(nopython=True)
+    def f(x, u, w) :
         return np.array([x[1] + 0.5*u[0],u[0]])
     
-    def d(self, x, xh, u, uh, w, wh) :
+    @staticmethod
+    @jit(nopython=True)
+    def d(x, xh, u, uh, w, wh) :
         return np.array([x[1] + 0.5*u[0],u[0]])
         # (self.A + self.Bp@self.control_if.)
 
-    def d_i (self, i, x, xh, u, uh, w, wh) :
+    @staticmethod
+    @jit(nopython=True)
+    def d_i (i, x, xh, u, uh, w, wh) :
         return (x[1] + 0.5*u[0]) if i == 0 else (u[0])
