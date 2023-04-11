@@ -85,62 +85,6 @@ class NeuralNetworkControl (ControlFunction) :
         u = self.nn(xin).cpu().detach().numpy().reshape(-1)
         return u
 
-class NeuralNetworkControlIFIBP (ControlInclusionFunction) :
-    def __init__(self, nn, mode='local', bound_opts=None, device='cpu', x_len=None, u_len=None, verbose=False, custom_ops=None, **kwargs):
-        super().__init__(u_len=nn[-1].out_features if u_len is None else u_len, mode=mode)
-        self.x_len = nn[0].in_features if x_len is None else x_len
-        self.global_input = torch.zeros([1,self.x_len], dtype=torch.float32)
-        self.bnn = BoundedModule(nn, self.global_input, bound_opts, device, verbose, custom_ops)
-        self.method = 'IBP'
-        self.device = device
-
-    def state_transform (self, x_xh, to='numpy') :
-        h = len(x_xh) // 2
-        if to == 'numpy':
-            x_L = np.copy(x_xh[:h])
-            x_U = np.copy(x_xh[h:])
-        elif to == 'torch' :
-            x_L = torch.tensor(x_xh[:h].reshape(1,-1), dtype=torch.float32)
-            x_U = torch.tensor(x_xh[h:].reshape(1,-1), dtype=torch.float32)
-        return h, x_L, x_U
-
-    def prime (self, x_xh) :
-        pass
-    
-    def u (self, t, x_xh) :
-        h, x, xh = self.state_transform(x_xh, to='torch')
-
-        ptb = PerturbationLpNorm(norm=np.inf, x_L=x, x_U=xh)
-        input = BoundedTensor(self.global_input, ptb)
-        self.u_lb, self.u_ub = self.bnn.compute_bounds(x=(input,), method='IBP')
-
-        return self.u_lb.cpu().detach().numpy().reshape(-1)
-    
-    def u_i (self, i, t, x_xh, swap_x) :
-        h, x, xh = self.state_transform(x_xh, to='numpy')
-        if swap_x :
-            x[i] = xh[i]
-        else :
-            xh[i] = x[i]
-        return self.u(t, np.concatenate((x,xh)))
-
-    def uh (self, t, x_xh) :
-        h, x, xh = self.state_transform(x_xh, to='torch')
-
-        ptb = PerturbationLpNorm(norm=np.inf, x_L=x, x_U=xh)
-        input = BoundedTensor(self.global_input, ptb)
-        self.u_lb, self.u_ub = self.bnn.compute_bounds(x=(input,), method='IBP')
-
-        return self.u_ub.cpu().detach().numpy().reshape(-1)
-
-    def uh_i(self, i, t, x_xh, swap_x) :
-        h, x, xh = self.state_transform(x_xh, to='numpy')
-        if swap_x :
-            x[i] = xh[i]
-        else :
-            xh[i] = x[i]
-        return self.uh(t, np.concatenate((x,xh)))
-
 
 class NeuralNetworkControlIF (ControlInclusionFunction) :
     def __init__(self, nn, st=None, method='CROWN', mode='hybrid', bound_opts=None, device='cpu', x_len=None, u_len=None, verbose=False, custom_ops=None, model=None, **kwargs):
