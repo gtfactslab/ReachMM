@@ -116,7 +116,7 @@ class MixedMonotoneModel :
     def S (self, x0, x1) :
         n = len(x0)
         S = np.empty((n,n))
-        u = self.control.u(0,x0)
+        u = self.control._u(0,x0)
         f0 = self.f(x0, u)
         for i in range(n):
             x = np.copy(x0)

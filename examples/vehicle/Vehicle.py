@@ -202,7 +202,7 @@ class VehicleMPCController (ControlFunction) :
         # self.opti.solver('ipopt',{'print_time':0},{'print_level':0, 'sb':'yes','max_iter':100000})
         # self.opti.solver('ipopt',)
 
-    def u(self, t, x):
+    def _u(self, t, x):
         self.opti.set_value(self.x0, x)
         for n in range(self.n_horizon + 1) :
             self.opti.set_initial(self.xx[:,n], x)

@@ -77,7 +77,7 @@ class NeuralNetworkControl (ControlFunction) :
         self.st = st
         self.device = device
 
-    def u(self, t, x) :
+    def _u(self, t, x) :
         if self.st is not None :
             xin = self.st(torch.tensor(x.astype(np.float32),device=self.device))
         else :
@@ -86,7 +86,7 @@ class NeuralNetworkControl (ControlFunction) :
         return u
 
 
-class NeuralNetworkControlIF (ControlInclusionFunction) :
+class NeuralNetworkControl (ControlFunction) :
     def __init__(self, nn, st=None, method='CROWN', mode='hybrid', bound_opts=None, device='cpu', x_len=None, u_len=None, verbose=False, custom_ops=None, model=None, **kwargs):
         super().__init__(u_len=nn[-1].out_features if u_len is None else u_len,mode=mode)
         self.x_len = nn[0].in_features if x_len is None else x_len
@@ -110,36 +110,19 @@ class NeuralNetworkControlIF (ControlInclusionFunction) :
         self.u_lb = None
         self.u_ub = None
         
-        # disclti, ltv mode
-        if mode == 'disclti' or mode == 'ltv' :
-            self.A = None
-            self.B = None
-            self.Bp = None
-            self.Bn = None
-            self.c = None
-            self._Mm = None
-            self._Mn = None
-            self.M_m = None
-            self.M_n = None
-            self.get_ABc = None
+        # # disclti, ltv mode
+        # if mode == 'disclti' or mode == 'ltv' :
+        #     self.A = None
+        #     self.B = None
+        #     self.Bp = None
+        #     self.Bn = None
+        #     self.c = None
+        #     self._Mm = None
+        #     self._Mn = None
+        #     self.M_m = None
+        #     self.M_n = None
+        #     self.get_ABc = None
     
-    def state_transform (self, x_xh, to='numpy') :
-        h = len(x_xh) // 2
-        if to == 'numpy':
-            x_L = np.copy(x_xh[:h])
-            x_U = np.copy(x_xh[h:])
-            if self.st is not None :
-                x_L = self.st.numpy(x_L)
-                x_U = self.st.numpy(x_U)
-        elif to == 'torch' :
-            x_L = torch.tensor(x_xh[:h].reshape(1,-1), dtype=torch.float32)
-            x_U = torch.tensor(x_xh[h:].reshape(1,-1), dtype=torch.float32)
-            if self.st is not None :
-                x_L = self.st(x_L)
-                x_U = self.st(x_U)
-        return h, x_L, x_U
-
-
     # Primes the control if to work for a range of x_xh (finds _C, C_, _d, d_)
     def prime (self, x_xh) :
         h, x_L, x_U = self.state_transform(x_xh, to='torch')

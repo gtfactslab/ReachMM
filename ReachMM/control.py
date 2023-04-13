@@ -3,93 +3,82 @@ from ReachMM.decomp import d_positive
 
 # ControlFunction implements a piecewise constant controller.
 class ControlFunction :
-    def __init__(self, u_len) :
-        self.u_len = u_len
-        self.u_calc = None
-    
-    def u  (self, t, x) :
-        pass
-
-    def step(self, t, x) :
-        self.u_calc = self.u (t,x)
-        return self.u_calc
-    
-    def __call__(self, t, x) : 
-        return self.step(t,x)
-
-class ControlInclusionFunction :
     def __init__(self, u_len, mode='hybrid') :
         self.u_len = u_len
         # joint or element
         # global, hybrid, or local
         self.mode = mode
-        self.u_calc  = None
-        self.uh_calc = None
-        self.u_calc_x   = None
-        self.uh_calc_x  = None
-        self.u_calc_xh  = None
-        self.uh_calc_xh = None
+        self.uCALC  = None
+        self._uCALC = None
+        self.u_CALC = None
+        self._uCALC_x   = None
+        self.u_CALC_x  = None
+        self._uCALCx_  = None
+        self.u_CALCx_ = None
+
+    def u (self, t, x) :
+        pass
     
-    def prime (self, x_xh) :
+    def prime (self, _x, x_) :
+        pass
+    
+    def _u  (self, t, _x, x_) :
         pass
 
-    def u  (self, t, x_xh) :
+    def u_ (self, t, _x, x_) :
         pass
 
-    def u_i (self, i, t, x_xh, swap_x) :
+    def step (self, t, x) :
         pass
 
-    def uh (self, t, x_xh) :
-        pass
-
-    def uh_i (self, i, t, x_xh, swap_x) :
-        pass
-
-    def step(self, t, x) :
+    def step_if (self, t, _x, x_) :
         if self.mode == 'global' :
-            self.u_calc  = self.u (t,x)
-            self.uh_calc = self.uh(t,x)
-            return self.u_calc, self.uh_calc
+            self._uCALC = self._u (t, _x)
+            self.u_CALC = self.u_ (t, x_)
+            # return self._uCALC, self.u_CALC
         elif self.mode == 'hybrid' or self.mode == 'local' :
-            d = len(x)//2
-            self.u_calc_x   = np.empty((d, self.u_len))
-            self.uh_calc_x  = np.empty((d, self.u_len))
-            self.u_calc_xh  = np.empty((d, self.u_len))
-            self.uh_calc_xh = np.empty((d, self.u_len))
+            if self._uCALC_x is None :
+                d = len(x_)
+                self._uCALC_x = np.empty((d, self.u_len))
+                self.u_CALC_x = np.empty((d, self.u_len))
+                self._uCALCx_ = np.empty((d, self.u_len))
+                self.u_CALCx_ = np.empty((d, self.u_len))
+            _xi = np.copy(_x); x_i = np.copy(x_)
             for i in range(d) :
-                self.u_calc_x  [i,:] = self.u_i (i,0,x,False)
-                self.uh_calc_x [i,:] = self.uh_i(i,0,x,False)
-                self.u_calc_xh [i,:] = self.u_i (i,0,x,True)
-                self.uh_calc_xh[i,:] = self.uh_i(i,0,x,True)
-            return self.u_calc_x, self.uh_calc_x, self.u_calc_xh, self.uh_calc_xh
+                x_i[i] = _x[i]
+                self.prime(_xi, x_i) if self.mode == 'local' else None
+                self._uCALC_x [i,:] = self._u (0,_x,x_)
+                self.u_CALC_x [i,:] = self.u_ (0,_x,x_)
+                x_i[i] = x_[i]; _xi[i] = x_[i]
+                self.prime(_xi, x_i) if self.mode == 'local' else None
+                self._uCALCx_ [i,:] = self._u (0,_x,x_)
+                self.u_CALCx_ [i,:] = self.u_ (0,_x,x_)
+                _xi[i] = _x[i]
+            # return self._uCALC_x, self.u_CALC_x, self._uCALCx_, self.u_CALC_x_
 
     def __call__(self, t, x) : 
         return self.step(t,x)
 
 class LinearControl (ControlFunction) :
-    def __init__(self, K):
-        super().__init__(K.shape[0])
-        self.K = K
-    def u (self, t, x) :
-        return self.K @ x
-
-class LinearControlIF (ControlInclusionFunction) :
     def __init__(self, K, mode='hybrid'):
         super().__init__(K.shape[0], mode)
         self.K = K
         self.Kp, self.Kn = d_positive(K, separate=True)
 
-    def u(self, t, x_xh) :
+    def u (self, t, x) :
+        return self.K @ x
+
+    def _u(self, t, _x, x_) :
         n = len(x_xh) // 2
         x = x_xh[:n]; xh = x_xh[n:]
         return self.Kp @ x + self.Kn @ xh
     
-    def uh (self, t, x_xh) :
+    def u_ (self, t, _x, x_) :
         n = len(x_xh) // 2
         x = x_xh[:n]; xh = x_xh[n:]
         return self.Kp @ xh + self.Kn @ x
     
-    def u_i (self, i, t, x_xh, swap_x) :
+    def _ui (self, i, t, _x, x_, swap_x) :
         h = len(x_xh) // 2
         x = np.copy(x_xh[:h]); xh = np.copy(x_xh[h:])
         if swap_x :
@@ -98,7 +87,7 @@ class LinearControlIF (ControlInclusionFunction) :
             xh[i] = x[i]
         return self.Kp @ x + self.Kn @ xh
 
-    def uh_i (self, i, t, x_xh, swap_x) :
+    def u_i (self, i, t, _x, x_, swap_x) :
         h = len(x_xh) // 2
         x = np.copy(x_xh[:h]); xh = np.copy(x_xh[h:])
         if swap_x :
