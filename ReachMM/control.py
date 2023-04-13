@@ -29,13 +29,15 @@ class ControlFunction :
         pass
 
     def step (self, t, x) :
-        pass
+        self.uCALC = self.u (t, x)
+        return self.uCALC
 
+    # Default interconnection inclusion function implementation
     def step_if (self, t, _x, x_) :
         if self.mode == 'global' :
             self._uCALC = self._u (t, _x)
             self.u_CALC = self.u_ (t, x_)
-            # return self._uCALC, self.u_CALC
+            return self._uCALC, self.u_CALC
         elif self.mode == 'hybrid' or self.mode == 'local' :
             if self._uCALC_x is None :
                 d = len(x_)
@@ -54,7 +56,7 @@ class ControlFunction :
                 self._uCALCx_ [i,:] = self._u (0,_x,x_)
                 self.u_CALCx_ [i,:] = self.u_ (0,_x,x_)
                 _xi[i] = _x[i]
-            # return self._uCALC_x, self.u_CALC_x, self._uCALCx_, self.u_CALC_x_
+            return self._uCALC_x, self.u_CALC_x, self._uCALCx_, self.u_CALC_x_
 
     def __call__(self, t, x) : 
         return self.step(t,x)
@@ -69,130 +71,108 @@ class LinearControl (ControlFunction) :
         return self.K @ x
 
     def _u(self, t, _x, x_) :
-        n = len(x_xh) // 2
-        x = x_xh[:n]; xh = x_xh[n:]
-        return self.Kp @ x + self.Kn @ xh
+        return self.Kp @ _x + self.Kn @ x_
     
     def u_ (self, t, _x, x_) :
-        n = len(x_xh) // 2
-        x = x_xh[:n]; xh = x_xh[n:]
-        return self.Kp @ xh + self.Kn @ x
+        return self.Kp @ x_ + self.Kn @ _x
+
+# class DisturbanceFunction :
+#     def __init__(self, w_len) :
+#         self.w__len = w_len
     
-    def _ui (self, i, t, _x, x_, swap_x) :
-        h = len(x_xh) // 2
-        x = np.copy(x_xh[:h]); xh = np.copy(x_xh[h:])
-        if swap_x :
-            x[i] = xh[i]
-        else :
-            xh[i] = x[i]
-        return self.Kp @ x + self.Kn @ xh
+#     def w  (self, t, x) :
+#         pass
 
-    def u_i (self, i, t, _x, x_, swap_x) :
-        h = len(x_xh) // 2
-        x = np.copy(x_xh[:h]); xh = np.copy(x_xh[h:])
-        if swap_x :
-            x[i] = xh[i]
-        else :
-            xh[i] = x[i]
-        return self.Kp @ xh + self.Kn @ x
+#     def __call__(self, t, x) : 
+#         return self.w_(t,x)
 
-class DisturbanceFunction :
-    def __init__(self, w_len) :
-        self.w__len = w_len
+# class DisturbanceInclusionFunction :
+#     def __init__(self, w_len, mode='hybrid') :
+#         self.w__len = w_len
+#         # joint or element
+#         # global, hybrid, or local
+#         self.mode = mode
     
-    def w  (self, t, x) :
-        pass
+#     def w  (self, t, x_xh) :
+#         pass
 
-    def __call__(self, t, x) : 
-        return self.w_(t,x)
+#     def w_i (self, i, t, x_xh, swap_x) :
+#         pass
 
-class DisturbanceInclusionFunction :
-    def __init__(self, w_len, mode='hybrid') :
-        self.w__len = w_len
-        # joint or element
-        # global, hybrid, or local
-        self.mode = mode
+#     def wh (self, t, x_xh) :
+#         pass
+
+#     def wh_i (self, i, t, x_xh, swap_x) :
+#         pass
+
+# class NoDisturbance (DisturbanceFunction) :
+#     def __init__(self, w_len=0):
+#         super().__init__(w_len)
+
+#     def w  (self, t, x_xh) :
+#         return np.zeros((self.w__len))
+
+#     def wh (self, t, x_xh) :
+#         return np.zeros((self.w__len))
+
+# class NoDisturbanceIF (DisturbanceInclusionFunction) :
+#     def __init__(self, w_len=0):
+#         super().__init__(w_len)
+
+#     def w  (self, t, x_xh) :
+#         return np.zeros((self.w__len))
+
+#     def w_i (self, i, t, x_xh, swap_x) :
+#         return np.zeros((self.w__len))
+
+#     def wh (self, t, x_xh) :
+#         return np.zeros((self.w__len))
+
+#     def wh_i (self, i, t, x_xh, swap_x) :
+#         return np.zeros((self.w__len))
+
+# class ConstantDisturbance (DisturbanceFunction) :
+#     def __init__(self, w):
+#         w = np.asarray(w)
+#         super().__init__(len(w))
+#         self.w_  = w
+
+#     def w (self, t, x) :
+#         return self.w_
+
+# class ConstantDisturbanceIF (DisturbanceInclusionFunction) :
+#     def __init__(self, w, wh, mode='hybrid'):
+#         w = np.asarray(w)
+#         wh = np.asarray(wh)
+#         super().__init__(len(w), mode)
+#         self.w_  = w
+#         self.wh_ = wh
+
+#     def w (self, t, x_xh) :
+#         return self.w_
     
-    def w  (self, t, x_xh) :
-        pass
+#     def w_i (self, i, t, x_xh, swap_x) :
+#         return self.w_
 
-    def w_i (self, i, t, x_xh, swap_x) :
-        pass
-
-    def wh (self, t, x_xh) :
-        pass
-
-    def wh_i (self, i, t, x_xh, swap_x) :
-        pass
-
-class NoDisturbance (DisturbanceFunction) :
-    def __init__(self, w_len=0):
-        super().__init__(w_len)
-
-    def w  (self, t, x_xh) :
-        return np.zeros((self.w__len))
-
-    def wh (self, t, x_xh) :
-        return np.zeros((self.w__len))
-
-class NoDisturbanceIF (DisturbanceInclusionFunction) :
-    def __init__(self, w_len=0):
-        super().__init__(w_len)
-
-    def w  (self, t, x_xh) :
-        return np.zeros((self.w__len))
-
-    def w_i (self, i, t, x_xh, swap_x) :
-        return np.zeros((self.w__len))
-
-    def wh (self, t, x_xh) :
-        return np.zeros((self.w__len))
-
-    def wh_i (self, i, t, x_xh, swap_x) :
-        return np.zeros((self.w__len))
-
-class ConstantDisturbance (DisturbanceFunction) :
-    def __init__(self, w):
-        w = np.asarray(w)
-        super().__init__(len(w))
-        self.w_  = w
-
-    def w (self, t, x) :
-        return self.w_
-
-class ConstantDisturbanceIF (DisturbanceInclusionFunction) :
-    def __init__(self, w, wh, mode='hybrid'):
-        w = np.asarray(w)
-        wh = np.asarray(wh)
-        super().__init__(len(w), mode)
-        self.w_  = w
-        self.wh_ = wh
-
-    def w (self, t, x_xh) :
-        return self.w_
+#     def wh (self, t, x_xh) :
+#         return self.wh_
     
-    def w_i (self, i, t, x_xh, swap_x) :
-        return self.w_
-
-    def wh (self, t, x_xh) :
-        return self.wh_
+#     def wh_i (self, i, t, x_xh, swap_x) :
+#         return self.wh_
     
-    def wh_i (self, i, t, x_xh, swap_x) :
-        return self.wh_
-    
-    def cut_all (self) :
-        partitions = []
-        part_avg = (self.w_ + self.wh_) / 2
-        w_wh = np.concatenate((self.w_, self.wh_))
+#     def cut_all (self) :
+#         partitions = []
+#         part_avg = (self.w_ + self.wh_) / 2
+#         w_wh = np.concatenate((self.w_, self.wh_))
 
-        for part_i in range(2**self.w__len) :
-            part = np.copy(w_wh)
-            for ind in range (self.w__len) :
-                part[ind + self.w__len*((part_i >> ind) % 2)] = part_avg[ind]
-            partitions.append(ConstantDisturbanceIF(part[:self.w__len],part[self.w__len:],self.mode))
+#         for part_i in range(2**self.w__len) :
+#             part = np.copy(w_wh)
+#             for ind in range (self.w__len) :
+#                 part[ind + self.w__len*((part_i >> ind) % 2)] = part_avg[ind]
+#             partitions.append(ConstantDisturbanceIF(part[:self.w__len],part[self.w__len:],self.mode))
 
-        # print(partitions)
-        return partitions
+#         # print(partitions)
+#         return partitions
 
-    def __repr__(self) -> str:
-        return f'ConstantDisturbanceIF(w={self.w_},wh={self.wh_})'
+#     def __repr__(self) -> str:
+#         return f'ConstantDisturbanceIF(w={self.w_},wh={self.wh_})'

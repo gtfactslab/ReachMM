@@ -42,22 +42,22 @@ class VehicleModel (MixedMonotoneModel):
         xdot = np.array([dX, dY, dpsi, dv])
         return xdot
     
-    # def d(self, x, xh, u, uh, w, wh) :
-    #     u1, u2 = u
-    #     u1h, u2h = uh
-    #     X, Y, psi, v = x.ravel()
-    #     Xh, Yh, psih, vh = xh.ravel()
-    #     beta = arctan2((self.lr * tan(u2)),(self.lf + self.lr))
-    #     betah = arctan2((self.lr * tan(u2h)),(self.lf + self.lr))
-    #     dX = d_b1b2( [v , d_cos(psi + beta, psih + betah)], 
-    #                  [vh, d_cos(psih + betah, psi + beta)])
-    #     dY = d_b1b2( [v , d_sin(psi + beta, psih + betah)], 
-    #                  [vh, d_sin(psih + betah, psi + beta)])
-    #     dpsi = d_b1b2( [v , d_sin(beta, betah)],
-    #                    [vh, d_sin(betah, beta)])
-    #     dv = u1
-    #     xdot = np.array([dX, dY, dpsi, dv])
-    #     return xdot
+    def d(self, x, xh, u, uh, w, wh) :
+        u1, u2 = u
+        u1h, u2h = uh
+        X, Y, psi, v = x.ravel()
+        Xh, Yh, psih, vh = xh.ravel()
+        beta = arctan2((self.lr * tan(u2)),(self.lf + self.lr))
+        betah = arctan2((self.lr * tan(u2h)),(self.lf + self.lr))
+        dX = d_b1b2( [v , d_cos(psi + beta, psih + betah)], 
+                     [vh, d_cos(psih + betah, psi + beta)])
+        dY = d_b1b2( [v , d_sin(psi + beta, psih + betah)], 
+                     [vh, d_sin(psih + betah, psi + beta)])
+        dpsi = d_b1b2( [v , d_sin(beta, betah)],
+                       [vh, d_sin(betah, beta)])
+        dv = u1
+        xdot = np.array([dX, dY, dpsi, dv])
+        return xdot
 
     def d(self, x, xh, u, uh, w, wh) :
         xcent = (x + xh)/2

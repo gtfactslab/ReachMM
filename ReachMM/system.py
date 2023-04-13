@@ -58,13 +58,13 @@ class MixedMonotoneSystem :
     
     def d (self, _x, x_, _u, u_, _w, w_) :
         _A, A_, _B, B_ = self.get_AB_bounds(_x, x_, _u, u_, _w, w_)
-        pass
+        return 
 
 class NNCS :
-    def __init__(self, system:MixedMonotoneSystem, nn:NeuralNetwork) -> None:
+    def __init__(self, system:MixedMonotoneSystem, nn:NeuralNetwork, method='jacobian') -> None:
         self.system = system
         self.nn = nn
-        self.control = NNControl(nn)
+        self.control = NeuralNetworkControl(nn)
     
     def d(self, _x, x_, _w, w_) :
         pass
