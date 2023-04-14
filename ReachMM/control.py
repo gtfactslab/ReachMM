@@ -10,9 +10,9 @@ class Control :
         self.uCALC  = None
         self._uCALC = None
         self.u_CALC = None
-        self._uCALC_x   = None
-        self.u_CALC_x  = None
-        self._uCALCx_  = None
+        self._uCALC_x = None
+        self.u_CALC_x = None
+        self._uCALCx_ = None
         self.u_CALCx_ = None
 
     def u (self, t, x) :
@@ -38,8 +38,8 @@ class Control :
             self.u_CALC = self.u_ (t, x_)
             return self._uCALC, self.u_CALC
         elif self.mode == 'hybrid' or self.mode == 'local' :
+            d = len(x_)
             if self._uCALC_x is None :
-                d = len(x_)
                 self._uCALC_x = np.empty((d, self.u_len))
                 self.u_CALC_x = np.empty((d, self.u_len))
                 self._uCALCx_ = np.empty((d, self.u_len))
@@ -55,7 +55,7 @@ class Control :
                 self._uCALCx_ [i,:] = self._u (0,_x,x_)
                 self.u_CALCx_ [i,:] = self.u_ (0,_x,x_)
                 _xi[i] = _x[i]
-            return self._uCALC_x, self.u_CALC_x, self._uCALCx_, self.u_CALC_x_
+            return self._uCALC_x, self.u_CALC_x, self._uCALCx_, self.u_CALCx_
 
     def __call__(self, t, x) : 
         return self.step(t,x)

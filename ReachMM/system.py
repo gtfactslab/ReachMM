@@ -148,9 +148,9 @@ class NNCNLSystem :
                 intM = intA + intB @ intC
                 xcent = (_x + x_) / 2; 
                 if i < n :
-                    xcent[i] = _x[i] 
+                    xcent[i%n] = _x[i%n] 
                 else :
-                    xcent[i] = x_[i]
+                    xcent[i%n] = x_[i%n]
                 ucent = self.control.u(0, xcent)
 
                 _Mm, _Mn = d_metzler(intM.l, True)
@@ -181,8 +181,26 @@ class NNCNLSystem :
                 # print(intf)
                 # print(intf.l)
                 # print(intf.u)
-                return np.concatenate((intf.l.reshape(-1),intf.u.reshape(-1)))
-
+                # return np.concatenate((intf.l.reshape(-1),intf.u.reshape(-1)))
+                res = np.concatenate((intf.l.reshape(-1),intf.u.reshape(-1)))
+                ret[i] = res[i]
+            return ret
+        elif self.method == 'interconnect' :
+            n = len(_xx_) // 2
+            ret = np.empty(2*n)
+            _xi = np.copy(_x); x_i = np.copy(x_)
+            for i in range(n) :
+                x_i[i] = _x[i]
+                intxi = IntervalVector.fromlu(_xi, x_i)
+                intui = IntervalVector.fromlu(self.control._uCALC_x[i,:], self.control.u_CALC_x[i,:])
+                intwi = IntervalVector.fromlu(self.dist._w(0,_xi,x_i), self.dist.w_(0,_xi,x_i))
+                ret[i] = self.sys.imath_f(intxi.intervals, intui.intervals, intwi.intervals)[0].l[i]
+                x_i[i] = x_[i]; _xi[i] = x_[i]
+                intxi = IntervalVector.fromlu(_xi, x_i)
+                intui = IntervalVector.fromlu(self.control._uCALCx_[i,:], self.control.u_CALCx_[i,:])
+                intwi = IntervalVector.fromlu(self.dist._w(0,_xi,x_i), self.dist.w_(0,_xi,x_i))
+                ret[i+n] = self.sys.imath_f(intxi.intervals, intui.intervals, intwi.intervals)[0].u[i]
+            return ret
     # def d(self, _x, x_, _w, w_) :
     #     pass
 
@@ -199,7 +217,8 @@ if __name__ == '__main__' :
 
     sys = NLSystem([px, py, psi, v], [u1, u2], [w], f_eqn)
     net = NeuralNetwork('../examples/vehicle/models/100r100r2')
-    clsys = NNCNLSystem(sys, net)
+    # clsys = NNCNLSystem(sys, net, method='jacobian')
+    clsys = NNCNLSystem(sys, net, method='interconnect')
 
     imath_x = [interval([0,1]), interval([1,2]), interval[-0.1,0.1], interval([0,1])]
     imath_u = [interval([0,1]), interval([1,2])]
@@ -225,6 +244,7 @@ if __name__ == '__main__' :
 
     for i, t in enumerate(tt[:-1]) :
         clsys.control.prime(_xx_[i,:n], _xx_[i,n:])
+        clsys.control.step_if(0, _xx_[i,:n], _xx_[i,n:])
         _xx_[i+1,:] = _xx_[i,:] + t_step*clsys.dunc(t, _xx_[i,:])
     
     print(_xx_)
