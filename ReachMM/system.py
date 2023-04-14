@@ -136,55 +136,70 @@ class NNCNLSystem :
             intC = IntervalMatrix.fromlu(self.control._C, self.control.C_)
             intd = IntervalMatrix.fromlu(self.control._d.reshape(-1,1), self.control.d_.reshape(-1,1))
 
+            _u, u_ = self.control.u_lb.reshape(-1), self.control.u_ub.reshape(-1)
             intA, intB = self.sys.get_AB_bounds(_x, x_, 
-                self.control.u_lb.reshape(-1), self.control.u_ub.reshape(-1), 
+                _u, u_,\
                 self.dist._w(t,_x,x_), self.dist.w_(t,_x,x_))
 
             # print(intA, intB, intC, intd)
 
             n = len(_xx_) // 2
-            ret = np.empty(2*n)
-            for i in range(2*n) :
-                intM = intA + intB @ intC
-                xcent = (_x + x_) / 2; 
-                if i < n :
-                    xcent[i%n] = _x[i%n] 
-                else :
-                    xcent[i%n] = x_[i%n]
-                ucent = self.control.u(0, xcent)
 
-                _Mm, _Mn = d_metzler(intM.l, True)
-                M_m, M_n = d_metzler(intM.u, True)
-                _t1 = _Mm@_x + _Mn@x_
-                t1_ = M_m@x_ + M_n@_x
-                t1 = IntervalMatrix.fromlu(_t1.reshape(-1,1), t1_.reshape(-1,1))
-                t2 = intA@xcent.reshape(-1,1)
-                t3 = intB@intd 
-                t4 = intB@ucent.reshape(-1,1)
-                t5 = self.sys.f(xcent, ucent, [0])[0].reshape(-1,1)
-                print('\n')
-                print('_x', _x)
-                print('x_', x_)
-                print('xc', xcent)
-                print('uc', ucent)
+            _Bp, _Bn = d_positive(intB.l, True)
+            B_p, B_n = d_positive(intB.u, True)
+            
+            _M = (intA.l + _Bn@intC.u + _Bp@intC.l)
+            M_ = (intA.u + B_p@intC.u + B_n@intC.l)
+            _Mm, _Mn = d_metzler(_M, True)
+            M_m, M_n = d_metzler(M_, True)
 
-                print('t1', t1)
-                print('t2', t2)
-                print('t3', t3)
-                print('t4', t4)
-                print('t5', t5)
+            _d = _Mm@_x + _Mn@x_ - intA.l@_x - intB.l@_u + _Bp@intd.l.reshape(-1) + _Bn@intd.u.reshape(-1) + self.sys.f(_x, _u, [0])[0].reshape(-1)
+            d_ = M_m@x_ + M_n@_x - intA.u@_x - intB.u@_u + B_p@intd.u.reshape(-1) + B_n@intd.l.reshape(-1) + self.sys.f(_x, _u, [0])[0].reshape(-1)
+            print((_Bp@intd.l).shape)
+            return np.concatenate((_d.reshape(-1), d_.reshape(-1)))
 
-                intf = t1 - t2 + t3 - t4 + t5
-                print('if', intf)
-                # intf = intM@intx - intA@xcent.reshape(-1,1) + intB@intd \
-                #        - intB@ucent.reshape(-1,1) + self.sys.f(xcent, ucent, [0])[0].reshape(-1,1)
-                # print(intf)
-                # print(intf.l)
-                # print(intf.u)
-                # return np.concatenate((intf.l.reshape(-1),intf.u.reshape(-1)))
-                res = np.concatenate((intf.l.reshape(-1),intf.u.reshape(-1)))
-                ret[i] = res[i]
-            return ret
+            # ret = np.empty(2*n)
+            # for i in range(2*n) :
+            #     intM = intA + intB @ intC
+            #     xcent = (_x + x_) / 2; 
+            #     if i < n :
+            #         xcent[i%n] = _x[i%n] 
+            #     else :
+            #         xcent[i%n] = x_[i%n]
+            #     ucent = self.control.u(0, xcent)
+
+            #     _Mm, _Mn = d_metzler(intM.l, True)
+            #     M_m, M_n = d_metzler(intM.u, True)
+            #     _t1 = _Mm@_x + _Mn@x_
+            #     t1_ = M_m@x_ + M_n@_x
+            #     t1 = IntervalMatrix.fromlu(_t1.reshape(-1,1), t1_.reshape(-1,1))
+            #     t2 = intA@xcent.reshape(-1,1)
+            #     t3 = intB@intd 
+            #     t4 = intB@ucent.reshape(-1,1)
+            #     t5 = self.sys.f(xcent, ucent, [0])[0].reshape(-1,1)
+            #     print('\n')
+            #     print('_x', _x)
+            #     print('x_', x_)
+            #     print('xc', xcent)
+            #     print('uc', ucent)
+
+            #     print('t1', t1)
+            #     print('t2', t2)
+            #     print('t3', t3)
+            #     print('t4', t4)
+            #     print('t5', t5)
+
+            #     intf = t1 - t2 + t3 - t4 + t5
+            #     print('if', intf)
+            #     # intf = intM@intx - intA@xcent.reshape(-1,1) + intB@intd \
+            #     #        - intB@ucent.reshape(-1,1) + self.sys.f(xcent, ucent, [0])[0].reshape(-1,1)
+            #     # print(intf)
+            #     # print(intf.l)
+            #     # print(intf.u)
+            #     # return np.concatenate((intf.l.reshape(-1),intf.u.reshape(-1)))
+            #     res = np.concatenate((intf.l.reshape(-1),intf.u.reshape(-1)))
+            #     ret[i] = res[i]
+            # return ret
         elif self.method == 'interconnect' :
             n = len(_xx_) // 2
             ret = np.empty(2*n)
@@ -234,8 +249,8 @@ if __name__ == '__main__' :
     tt = np.arange(0,1.25+t_step,t_step)
 
     x0 = np.array([8,8,-2*np.pi/3,2])
-    # pert = np.array([0.1,0.1,0.01,0.01])
-    pert = np.array([0.001,0.001,0.001,0.001])
+    pert = np.array([0.1,0.1,0.01,0.01])
+    # pert = np.array([0.001,0.001,0.001,0.001])
     # pert = np.array([0.01,0.01,0.01,0.01])
 
     n = len(x0)
