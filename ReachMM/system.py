@@ -7,6 +7,7 @@ from ReachMM.control import Disturbance, NoDisturbance
 from ReachMM.neural import *
 from ReachMM.decomp import d_metzler, d_positive
 from pprint import pformat
+from numba import jit
 
 class IntervalMatrix :
     def __init__(self, intervals, l=None, u=None) :
@@ -155,7 +156,8 @@ class NNCNLSystem :
 
             _d = _Mm@_x + _Mn@x_ - intA.l@_x - intB.l@_u + _Bp@intd.l.reshape(-1) + _Bn@intd.u.reshape(-1) + self.sys.f(_x, _u, [0])[0].reshape(-1)
             d_ = M_m@x_ + M_n@_x - intA.u@_x - intB.u@_u + B_p@intd.u.reshape(-1) + B_n@intd.l.reshape(-1) + self.sys.f(_x, _u, [0])[0].reshape(-1)
-            print((_Bp@intd.l).shape)
+            _d = _Mm@_x + _Mn@x_ - intA.l@_x - intB.l@_u + _Bp@intd.l.reshape(-1) + _Bn@intd.u.reshape(-1) + self.sys.f(_x, _u, [0])[0].reshape(-1)
+            d_ = M_m@x_ + M_n@_x - intA.u@_x - intB.u@_u + B_p@intd.u.reshape(-1) + B_n@intd.l.reshape(-1) + self.sys.f(_x, _u, [0])[0].reshape(-1)
             return np.concatenate((_d.reshape(-1), d_.reshape(-1)))
 
             # ret = np.empty(2*n)
@@ -232,8 +234,8 @@ if __name__ == '__main__' :
 
     sys = NLSystem([px, py, psi, v], [u1, u2], [w], f_eqn)
     net = NeuralNetwork('../examples/vehicle/models/100r100r2')
-    # clsys = NNCNLSystem(sys, net, method='jacobian')
-    clsys = NNCNLSystem(sys, net, method='interconnect')
+    clsys = NNCNLSystem(sys, net, method='jacobian')
+    # clsys = NNCNLSystem(sys, net, method='interconnect')
 
     imath_x = [interval([0,1]), interval([1,2]), interval[-0.1,0.1], interval([0,1])]
     imath_u = [interval([0,1]), interval([1,2])]
@@ -257,11 +259,15 @@ if __name__ == '__main__' :
     _xx_ = np.empty((len(tt), 2*n))
     _xx_[0,:] = np.concatenate((x0 - pert,x0 + pert))
 
+    import time
+
+    before = time.time()
     for i, t in enumerate(tt[:-1]) :
         clsys.control.prime(_xx_[i,:n], _xx_[i,n:])
         clsys.control.step_if(0, _xx_[i,:n], _xx_[i,n:])
         _xx_[i+1,:] = _xx_[i,:] + t_step*clsys.dunc(t, _xx_[i,:])
-    
+    after = time.time()
+    print(after - before)
     print(_xx_)
 
     # clsys.dunc(0, np.concatenate((x-eps,x+eps)))
