@@ -70,7 +70,7 @@ class ScaledMSELoss (nn.MSELoss) :
     def __call__(self, output, target) :
         return super().__call__(output/self.scale, target/self.scale)
 
-class NeuralNetworkControl (ControlFunction) :
+class NeuralNetworkControl (Control) :
     def __init__(self, nn, st=None, method='CROWN', mode='hybrid', bound_opts=None, device='cpu', x_len=None, u_len=None, verbose=False, custom_ops=None, model=None, **kwargs):
         super().__init__(u_len=nn[-1].out_features if u_len is None else u_len,mode=mode)
         self.x_len = nn[0].in_features if x_len is None else x_len
@@ -93,19 +93,6 @@ class NeuralNetworkControl (ControlFunction) :
         self.u_lb = None
         self.u_ub = None
         
-        # # disclti, ltv mode
-        # if mode == 'disclti' or mode == 'ltv' :
-        #     self.A = None
-        #     self.B = None
-        #     self.Bp = None
-        #     self.Bn = None
-        #     self.c = None
-        #     self._Mm = None
-        #     self._Mn = None
-        #     self.M_m = None
-        #     self.M_n = None
-        #     self.get_ABc = None
-
     def u (self, t, x) :
         xin = torch.tensor(x.astype(np.float32),device=self.device)
         u = self.nn(xin).cpu().detach().numpy().reshape(-1)
@@ -113,16 +100,15 @@ class NeuralNetworkControl (ControlFunction) :
     
     # Primes the control if to work for a range of x_xh (finds _C, C_, _d, d_)
     def prime (self, _x, x_) :
-        # h, x_L, x_U = self.state_transform(x_xh, to='torch')
-        x_L = torch.tensor([_x], dtype=torch.float32)
-        x_U = torch.tensor([x_], dtype=torch.float32)
-        # print(x_L)
+        x_L = torch.tensor(_x.reshape(1,-1), dtype=torch.float32)
+        x_U = torch.tensor(x_.reshape(1,-1), dtype=torch.float32)
         ptb = PerturbationLpNorm(norm=np.inf, x_L=x_L, x_U=x_U)
         input = BoundedTensor(self.global_input, ptb)
         self.u_lb, self.u_ub, A_dict = \
             self.bnn.compute_bounds(x=(input,), method=self.method, return_A=True, needed_A_dict=self.required_A)
         self.u_lb = self.u_lb.cpu().detach().numpy()
         self.u_ub = self.u_ub.cpu().detach().numpy()
+
         self._C = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['lA'].cpu().detach().numpy().reshape(self.u_len,-1)
         self.C_ = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['uA'].cpu().detach().numpy().reshape(self.u_len,-1)
         self._d = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['lbias'].cpu().detach().numpy().reshape(-1,1)

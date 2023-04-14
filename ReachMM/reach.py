@@ -8,9 +8,7 @@ import shapely.ops as so
 from scipy.integrate import OdeSolution, solve_ivp
 from numpy.typing import ArrayLike, DTypeLike
 from typing import Callable
-from ReachMM import ControlFunction, ControlInclusionFunction
-from ReachMM import DisturbanceFunction, DisturbanceInclusionFunction
-from ReachMM import NoDisturbance, NoDisturbanceIF
+from ReachMM import Control
 from ReachMM.utils import run_time
 from ReachMM.decomp import d_positive
 import sys
@@ -50,9 +48,8 @@ class Trajectory :
         self.n0 = 0
 
     def get_sol(self, n) :
-        # print(n, self.n0, len(self.sol))
-        # print(len(self.sol))
         return self.sol[n - self.n0]
+
     def t_max (self) :
         if self.sol is None :
             return -1
@@ -111,12 +108,10 @@ class Trajectory :
 class Partition :
     _id = 0
 
-    def __init__(self, x_xh0:ArrayLike, model,
-                 control_if:ControlInclusionFunction, primer:bool, 
-                 disturbance_if:DisturbanceInclusionFunction,
+    def __init__(self, x_xh0:ArrayLike, sys, primer:bool, 
                  t_step:float=None, primer_depth:int=0, depth:int=0, n0:int=0) -> None:
         # super().__init__([t0,t0],[x_xh0,x_xh0])
-        self.model = model
+        self.sys = sys
         self.control_if = control_if
         self.primer = primer
         self.disturbance_if = disturbance_if
@@ -139,8 +134,6 @@ class Partition :
             print(n, self.n0)
             print(len(self.sol), self.depth, self.subpartitions)
             print(self.sol)
-            a
-            # print_tb(e.__traceback__)
             sys.exit(1)
 
 
@@ -162,7 +155,7 @@ class Partition :
         else :
             return (len(self.sol) - 1 + self.n0) * self.t_step
     
-    def integrate (self, t_span, method='RK45') :
+    def integrate (self, t_span, method='euler') :
         if self.t_step is None and method == 'euler' :
             Exception(f'Calling {method} method without t_step')
         elif self.t_step is not None and method != 'euler' :
@@ -171,8 +164,6 @@ class Partition :
         x_xh0 = self(t_span[0])
         if self.primer :
             self.control_if.prime(x_xh0)
-
-        self.model.disturbance_if = self.disturbance_if
 
         if self.subpartitions is None :
             self.control_if.step(t_span[0],x_xh0)
@@ -183,19 +174,11 @@ class Partition :
                 for n in range(round(t_span[0]/self.t_step),round(t_span[1]/self.t_step)):
                     # self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
                     if self.control_if.mode == 'disclti' or self.control_if.mode == 'ltv' :
-                        self.sol.append(self.model.func_(n*self.t_step, self.get_sol(n)))
+                        self.sol.append(self.sys.func_(n*self.t_step, self.get_sol(n)))
                     else :
-                        self.sol.append(self.model.func_(n*self.t_step, self.get_sol(n)))
+                        self.sol.append(self.sys.func_(n*self.t_step, self.get_sol(n)))
                         # self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
 
-            else :
-                ret = solve_ivp(self.model.func_, t_span, x_xh0,
-                                method, dense_output=True)
-                if self.sol is None :
-                    self.sol = ret.sol
-                else :
-                    self.sol = OdeSolution(np.append(self.sol.ts, ret.sol.ts[1:]),
-                                        (self.sol.interpolants + ret.sol.interpolants))
         else :
             for subpart in self.subpartitions :
                 subpart.integrate(t_span, method)
@@ -210,7 +193,7 @@ class Partition :
         if self.primer :
             self.control_if.prime(x_xh0)
 
-        self.model.disturbance_if = self.disturbance_if
+        self.sys.disturbance_if = self.disturbance_if
 
         if self.subpartitions is None :
             self.control_if.step(t_span[0],x_xh0)
@@ -224,9 +207,9 @@ class Partition :
                 olen = len(self.sol)
                 for n in range(n0,nf):
                     if self.control_if.mode == 'disclti' :
-                        self.sol.append(self.model.func_(n*self.t_step, self.get_sol(n)))
+                        self.sol.append(self.sys.func_(n*self.t_step, self.get_sol(n)))
                     else :
-                        self.sol.append(self.get_sol(n) + self.t_step*self.model.func_(n*self.t_step, self.get_sol(n)))
+                        self.sol.append(self.get_sol(n) + self.t_step*self.sys.func_(n*self.t_step, self.get_sol(n)))
 
                     
                     if self.depth < max_depth and n >= n0 + round(check_contr*(nf-n0)) :
@@ -235,12 +218,7 @@ class Partition :
                         C = mwtm / mwt0
                         mwtf = (C**((nf-(n+1))/((n+1)-n0))) * mwtm
                         if mwtf > 1 :
-                            # print(mwtf, mwtm, mwt0)
-                            # print(f'cutting from depth {self.depth}')
-                            # print(C,mwtf, nf,n)
-                            # self.sol = self.sol[:(n0+1 - self.n0)]
                             self.sol = self.sol[:olen]
-                            # print(len(self.sol))
                             sub_primer = self.primer_depth < max_primer_depth
                             if sub_primer and self.primer :
                                 self.primer = False
@@ -250,7 +228,7 @@ class Partition :
                             return
 
             else :
-                ret = solve_ivp(self.model.func_, t_span, x_xh0,
+                ret = solve_ivp(self.sys.func_, t_span, x_xh0,
                                 method, dense_output=True)
                 if self.sol is None :
                     self.sol = ret.sol
@@ -289,7 +267,7 @@ class Partition :
                 for ind in range (self.n) :
                     part[ind + self.n*((part_i >> ind) % 2)] = part_avg[ind]
                 for dist_part in dist_parts :
-                    self.subpartitions.append(Partition(part, self.model, self.control_if, primer, dist_part, self.t_step, primer_depth, self.depth+1, n0))
+                    self.subpartitions.append(Partition(part, self.sys, self.control_if, primer, dist_part, self.t_step, primer_depth, self.depth+1, n0))
         else :
             for part in self.subpartitions :
                 part.cut_all(primer,cut_dist,n0)

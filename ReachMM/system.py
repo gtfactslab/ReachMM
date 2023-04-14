@@ -1,28 +1,84 @@
+from __future__ import annotations
 import numpy as np
 import sympy as sp
 from inspect import getsourcefile, getabsfile, getfile
 from interval import interval, imath
+from ReachMM.control import Disturbance, NoDisturbance
 from ReachMM.neural import *
+from ReachMM.decomp import d_metzler, d_positive
+from pprint import pformat
 
 class IntervalMatrix :
-    def __init__(self, intervals) :
+    def __init__(self, intervals, l=None, u=None) :
         self.intervals = intervals
-        self.l = np.array([ [interval(b)[0][0] for b in a] for a in intervals ])
-        self.u = np.array([ [interval(b)[0][1] for b in a] for a in intervals ])
+        if l is None :
+            self.l = np.array([ [interval(b)[0][0] for b in a] for a in intervals ])
+            self.u = np.array([ [interval(b)[0][1] for b in a] for a in intervals ])
+        else :
+            self.l = l
+            self.u = u
+        self.shape = self.l.shape
+    
+    @classmethod
+    def fromlu (cls, l, u) :
+        intervals = [[interval([l[i][j], u[i][j]]) for j in range(l.shape[1])] \
+                                                   for i in range(u.shape[0])]
+        return cls(intervals, l, u)
+    
+    def __getitem__ (self, i) :
+        return self.intervals[i]
+
+    def __matmul__ (self, B) :
+        m,p1 = self.shape
+        p2,n = B.shape
+        if p1 != p2 :
+            Exception(f'matrices don\'t match k1:{p1}, k2:{p2}')
+        ret = [[interval(0) for j in range(n)] for i in range(m)]
+        for i in range(m) :
+            for j in range(n) :
+                for k in range(p1) :
+                    ret[i][j] = ret[i][j] + self[i][k] * B[k][j]
+        return IntervalMatrix(ret)
+    
+    def __add__ (self, B) :
+        m1, n1 = self.shape
+        m2, n2 = B.shape
+        if m1 != m2 or n1 != n2 :
+            raise Exception(f'matrices don\'t match {m1,n1,m2,n2}')
+        return IntervalMatrix([[self[i][j] + B[i][j] for j in range(n1)] for i in range(m2)])
+    
+    def __sub__ (self, B) :
+        m1, n1 = self.shape
+        m2, n2 = B.shape
+        if m1 != m2 or n1 != n2 :
+            raise Exception(f'matrices don\'t match {m1,n1,m2,n2}')
+        return IntervalMatrix([[self[i][j] - B[i][j] for j in range(n1)] for i in range(m2)])
+    
+    def __str__ (self) :
+        return pformat(self.intervals, width=100)
 
 class IntervalVector :
-    def __init__(self, l, u) :
-        self.l = l
-        self.u = u
-        self.c = (l + u) / 2
-        self.intervals = [interval([l[i], u[i]]) for i in range(len(l))]
+    def __init__(self, intervals, l=None, u=None) :
+        self.intervals = intervals
+        if l is None :
+            self.l = np.array([interval(b)[0] for b in intervals])
+            self.u = np.array([interval(b)[1] for b in intervals])
+        else :
+            self.l = l
+            self.u = u
+    
+    @classmethod
+    def fromlu (cls, l, u) :
+        intervals = [interval([l[i], u[i]]) for i in range(len(l))]
+        return cls(intervals, l, u)
 
-class MixedMonotoneSystem :
+class NLSystem :
     def __init__(self, x_vars, u_vars, w_vars, f_eqn) -> None:
         self.x_vars = sp.Matrix(x_vars)
         self.u_vars = sp.Matrix(u_vars)
         self.w_vars = sp.Matrix(w_vars)
         self.f_eqn  = sp.Matrix(f_eqn)
+        print(self.f_eqn)
 
         def my_cse(exprs, symbols=None, optimizations=None, postprocess=None,
             order='canonical', ignore=(), list=True) :
@@ -41,15 +97,14 @@ class MixedMonotoneSystem :
         self.imath_Df_x = sp.lambdify(tuple, self.f_eqn.jacobian(x_vars), imathmodule, cse=my_cse)
         self.imath_Df_u = sp.lambdify(tuple, self.f_eqn.jacobian(u_vars), imathmodule, cse=my_cse)
         self.imath_Df_w = sp.lambdify(tuple, self.f_eqn.jacobian(w_vars), imathmodule, cse=my_cse)
-        # print(self.Df_x, self.Df_u, self.Df_w)
     
     def get_AB (self, x, u, w) :
         return self.Df_x(x, u, w), self.Df_u(x, u, w)
 
-    def get_AB_bounds (self, _x, x_, _u, u_, _w, w_, intervals=False) :
-        x = IntervalVector(_x, x_)
-        u = IntervalVector(_u, u_)
-        w = IntervalVector(_w, w_)
+    def get_AB_bounds (self, _x, x_, _u, u_, _w, w_, intervals=True) :
+        x = IntervalVector.fromlu(_x, x_)
+        u = IntervalVector.fromlu(_u, u_)
+        w = IntervalVector.fromlu(_w, w_)
         intA = self.imath_Df_x(x.intervals, u.intervals, w.intervals)[0]
         intB = self.imath_Df_u(x.intervals, u.intervals, w.intervals)[0]
         if intervals :
@@ -59,20 +114,81 @@ class MixedMonotoneSystem :
     def d (self, _x, x_, _u, u_, _w, w_) :
         _A, A_, _B, B_ = self.get_AB_bounds(_x, x_, _u, u_, _w, w_)
         return 
-
-class NNCS :
-    def __init__(self, system:MixedMonotoneSystem, nn:NeuralNetwork, method='jacobian') -> None:
-        self.system = system
+    
+class NNCNLSystem :
+    def __init__(self, sys:NLSystem, nn:NeuralNetwork, method='jacobian',
+                 dist:Disturbance=NoDisturbance(1)) -> None:
+        self.sys = sys
         self.nn = nn
         self.control = NeuralNetworkControl(nn)
+        self.method = method
+        self.dist = dist
     
-    def d(self, _x, x_, _w, w_) :
-        pass
+    def func (self, t, x) :
+        return self.sys.f(x,self.control.uCALC,self.dist(t,x))
+
+    def dunc (self, t, _xx_) :
+        n = len(_xx_) // 2
+        _x = _xx_[:n]; x_ = _xx_[n:]
+        if self.method == 'jacobian' :
+            intx = IntervalMatrix.fromlu(_x.reshape(-1,1), x_.reshape(-1,1))
+            # self.control.step_if(0, _x, x_)
+            intC = IntervalMatrix.fromlu(self.control._C, self.control.C_)
+            intd = IntervalMatrix.fromlu(self.control._d.reshape(-1,1), self.control.d_.reshape(-1,1))
+
+            intA, intB = self.sys.get_AB_bounds(_x, x_, 
+                self.control.u_lb.reshape(-1), self.control.u_ub.reshape(-1), 
+                self.dist._w(t,_x,x_), self.dist.w_(t,_x,x_))
+
+            # print(intA, intB, intC, intd)
+
+            n = len(_xx_) // 2
+            ret = np.empty(2*n)
+            for i in range(2*n) :
+                intM = intA + intB @ intC
+                xcent = (_x + x_) / 2; 
+                if i < n :
+                    xcent[i] = _x[i] 
+                else :
+                    xcent[i] = x_[i]
+                ucent = self.control.u(0, xcent)
+
+                _Mm, _Mn = d_metzler(intM.l, True)
+                M_m, M_n = d_metzler(intM.u, True)
+                _t1 = _Mm@_x + _Mn@x_
+                t1_ = M_m@x_ + M_n@_x
+                t1 = IntervalMatrix.fromlu(_t1.reshape(-1,1), t1_.reshape(-1,1))
+                t2 = intA@xcent.reshape(-1,1)
+                t3 = intB@intd 
+                t4 = intB@ucent.reshape(-1,1)
+                t5 = self.sys.f(xcent, ucent, [0])[0].reshape(-1,1)
+                print('\n')
+                print('_x', _x)
+                print('x_', x_)
+                print('xc', xcent)
+                print('uc', ucent)
+
+                print('t1', t1)
+                print('t2', t2)
+                print('t3', t3)
+                print('t4', t4)
+                print('t5', t5)
+
+                intf = t1 - t2 + t3 - t4 + t5
+                print('if', intf)
+                # intf = intM@intx - intA@xcent.reshape(-1,1) + intB@intd \
+                #        - intB@ucent.reshape(-1,1) + self.sys.f(xcent, ucent, [0])[0].reshape(-1,1)
+                # print(intf)
+                # print(intf.l)
+                # print(intf.u)
+                return np.concatenate((intf.l.reshape(-1),intf.u.reshape(-1)))
+
+    # def d(self, _x, x_, _w, w_) :
+    #     pass
 
 
 if __name__ == '__main__' :
     px, py, psi, v, u1, u2, w = sp.symbols('p_x p_y psi v u1 u2 w')
-    # beta = sp.atan2(sp.tan(u2),2)
     beta = sp.atan(sp.tan(u2)/2)
     f_eqn = [
         v*sp.cos(psi + beta), 
@@ -80,34 +196,43 @@ if __name__ == '__main__' :
         v*sp.sin(beta),
         u1
     ]
-    # f_eqn = sp.Matrix([
-    #     v*sp.cos(psi + beta), 
-    #     v*sp.sin(psi + beta), 
-    #     v*sp.sin(beta),
-    #     u1
-    # ])
 
-    # print(f_eqn)
-
-    sys = MixedMonotoneSystem([px, py, psi, v], [u1, u2], [w], f_eqn)
-
-    x = [0,0,1,0]
-    _u = [1,0.1]
-
+    sys = NLSystem([px, py, psi, v], [u1, u2], [w], f_eqn)
+    net = NeuralNetwork('../examples/vehicle/models/100r100r2')
+    clsys = NNCNLSystem(sys, net)
 
     imath_x = [interval([0,1]), interval([1,2]), interval[-0.1,0.1], interval([0,1])]
     imath_u = [interval([0,1]), interval([1,2])]
     imath_w = [0]
     eps = np.array([0.01,0.01,0.001,0.001])
     x = np.array([0.5, 1.5, 0, 0.5]); 
-    _u = np.array([0.5, 1.5])
+    u = np.array([0.5, 1.5])
     w = np.array([0])
 
-    _A, A_, _B, B_ = sys.get_AB_bounds(x-eps, x+eps, _u-eps[2:], _u+eps[2:], w, w)
-    print(_A)
-    print(A_)
-    print(_B)
-    print(B_)
+    print(sys.f(x, u, w))
+
+    t_step = 0.125
+    tt = np.arange(0,1.25+t_step,t_step)
+
+    x0 = np.array([8,8,-2*np.pi/3,2])
+    # pert = np.array([0.1,0.1,0.01,0.01])
+    pert = np.array([0.001,0.001,0.001,0.001])
+    # pert = np.array([0.01,0.01,0.01,0.01])
+
+    n = len(x0)
+    _xx_ = np.empty((len(tt), 2*n))
+    _xx_[0,:] = np.concatenate((x0 - pert,x0 + pert))
+
+    for i, t in enumerate(tt[:-1]) :
+        clsys.control.prime(_xx_[i,:n], _xx_[i,n:])
+        _xx_[i+1,:] = _xx_[i,:] + t_step*clsys.dunc(t, _xx_[i,:])
+    
+    print(_xx_)
+
+    # clsys.dunc(0, np.concatenate((x-eps,x+eps)))
+
+
+    # intA, intB = sys.get_AB_bounds(x-eps, x+eps, u-eps[2:], u+eps[2:], w, w)
 
     # imath_a = sys.imath_Df_x(imath_x, imath_u, imath_w)[0]
     # print(imath_a)
