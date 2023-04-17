@@ -234,8 +234,8 @@ if __name__ == '__main__' :
 
     sys = NLSystem([px, py, psi, v], [u1, u2], [w], f_eqn)
     net = NeuralNetwork('../examples/vehicle/models/100r100r2')
-    clsys = NNCNLSystem(sys, net, method='jacobian')
-    # clsys = NNCNLSystem(sys, net, method='interconnect')
+    # clsys = NNCNLSystem(sys, net, method='jacobian')
+    clsys = NNCNLSystem(sys, net, method='interconnect')
 
     imath_x = [interval([0,1]), interval([1,2]), interval[-0.1,0.1], interval([0,1])]
     imath_u = [interval([0,1]), interval([1,2])]
@@ -261,13 +261,23 @@ if __name__ == '__main__' :
 
     import time
 
-    before = time.time()
-    for i, t in enumerate(tt[:-1]) :
-        clsys.control.prime(_xx_[i,:n], _xx_[i,n:])
-        clsys.control.step_if(0, _xx_[i,:n], _xx_[i,n:])
-        _xx_[i+1,:] = _xx_[i,:] + t_step*clsys.dunc(t, _xx_[i,:])
-    after = time.time()
-    print(after - before)
+    for repeat in range(3):
+        sum = 0
+        for i, t in enumerate(tt[:-1]) :
+            clsys.control.prime(_xx_[i,:n], _xx_[i,n:])
+            clsys.control.step_if(0, _xx_[i,:n], _xx_[i,n:])
+            before = time.time()
+            _xx_[i+1,:] = _xx_[i,:] + t_step*clsys.dunc(t, _xx_[i,:])
+            after = time.time(); sum += after - before
+        # after = time.time()
+        print(sum)
+        # before = time.time()
+        # for i, t in enumerate(tt[:-1]) :
+        #     clsys.control.prime(_xx_[i,:n], _xx_[i,n:])
+        #     clsys.control.step_if(0, _xx_[i,:n], _xx_[i,n:])
+        #     _xx_[i+1,:] = _xx_[i,:] + t_step*clsys.dunc(t, _xx_[i,:])
+        # after = time.time()
+        # print(after - before)
     print(_xx_)
 
     # clsys.dunc(0, np.concatenate((x-eps,x+eps)))
