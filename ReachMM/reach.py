@@ -112,9 +112,7 @@ class Partition :
                  t_step:float=None, primer_depth:int=0, depth:int=0, n0:int=0) -> None:
         # super().__init__([t0,t0],[x_xh0,x_xh0])
         self.sys = sys
-        self.control_if = control_if
         self.primer = primer
-        self.disturbance_if = disturbance_if
         self.subpartitions = None
         # self.growth_event.terminal = True
         self.sol = None

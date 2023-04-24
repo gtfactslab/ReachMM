@@ -1,6 +1,8 @@
 import numpy as np
 import sympy as sp
 import interval
+import time
+from numba import jit, njit
 
 class NLSystem :
     def __init__(self, x_vars, u_vars, w_vars, f_eqn) -> None:
@@ -44,20 +46,20 @@ print(intx)
 
 import inspect
 
-def _lambdifygenerated(_Dummy_25, _Dummy_26, _Dummy_27):
-    [p_x, p_y, psi, v] = _Dummy_25
-    [u1, u2] = _Dummy_26
-    [w] = _Dummy_27
-    _dum0 = np.tan(u2)
-    _dum1 = (1/2)*_dum0
-    _dum2 = psi + np.arctan(_dum1)
-    _dum3 = np.sin(_dum2)
-    _dum4 = np.cos(_dum2)
-    print(_dum4)
-    return [np.array([[0, 0, -_dum3*v, _dum4], [0, 0, _dum4*v, _dum3], [0, 0, 0, _dum1/np.sqrt((1/4)*_dum0**2 + 1)], [0, 0, 0, 0]])]
+sum = 0
 
-print(inspect.getsource(sys.f))
-print(inspect.getsource(sys.Df_x))
-print(sys.f(intx, [z,z], [np.interval(0)]))
-print(_lambdifygenerated(intx, [z,z], [np.interval(0)]))
+for repeat in range(10000) :
+    before = time.time()
+    # res = _lambdifygenerated(intx, [z,z],[np.interval(0)])
+    res = _lambdifygenerated(x0, [0.0,0],[0])
+    after = time.time()
+    sum += (after - before)
+
+print (sum)
+
+
+# print(inspect.getsource(sys.f))
+# print(inspect.getsource(sys.Df_x))
+# print(sys.f(intx, [z,z], [np.interval(0)]))
+# print(_lambdifygenerated(intx, [z,z], [np.interval(0)])[0])
 
