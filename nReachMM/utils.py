@@ -1,6 +1,5 @@
 import time
 import numpy as np
-from numpy import diag_indices_from, clip, inf, empty
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.collections import LineCollection
@@ -122,27 +121,3 @@ def plot_solution(fig, axs, tt, SS, UU) :
     plot_XYPV_t(axs[0,0],tt,SS)
     plot_Y_X (fig,axs[0,1],tt,XX,YY)
     plot_u_t (axs[1,1],tt,UU_acc,UU_ang)
-
-def d_metzler (A, separate=True)  :
-    diag = diag_indices_from(A)
-    Am = clip(A, 0, inf); Am[diag] = A[diag]
-    An = A - Am
-    if separate :
-        return Am, An
-    else :
-        n = A.shape[0]
-        ret = empty((2*n,2*n))
-        ret[:n,:n] = Am; ret[n:,n:] = Am
-        ret[:n,n:] = An; ret[n:,:n] = An
-        return ret
-
-def d_positive (B, separate=True) :
-    Bp = clip(B, 0, inf); Bn = clip(B, -inf, 0)
-    if separate :
-        return Bp, Bn
-    else :
-        n,m = B.shape
-        ret = empty((2*n,2*m))
-        ret[:n,:m] = Bp; ret[n:,m:] = Bp
-        ret[:n,m:] = Bn; ret[n:,:m] = Bn
-        return ret

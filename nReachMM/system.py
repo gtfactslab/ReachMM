@@ -3,7 +3,7 @@ import numpy as np
 import sympy as sp
 import interval
 from ReachMM.neural import NeuralNetwork, NeuralNetworkControl
-from ReachMM.utils import d_metzler, d_positive
+from ReachMM.decomp import d_metzler, d_positive
 from pprint import pformat
 from numba import jit
 from inspect import getsource
@@ -24,7 +24,7 @@ class NLSystem :
         tuple = (x_vars, u_vars, w_vars)
 
         self.f    = sp.lambdify(tuple, self.f_eqn, 'numpy', cse=my_cse)
-        self.f_i  = [sp.lambdify(tuple, f_eqn_i, 'numpy', cse=my_cse) for f_eqn_i in self.f_eqn]
+        self.f_i = [sp.lambdify(tuple, f_eqn_i, 'numpy', cse=my_cse) for f_eqn_i in self.f_eqn]
 
         self.Df_x = sp.lambdify(tuple, self.f_eqn.jacobian(x_vars), 'numpy', cse=my_cse)
         self.Df_u = sp.lambdify(tuple, self.f_eqn.jacobian(u_vars), 'numpy', cse=my_cse)
@@ -33,7 +33,7 @@ class NLSystem :
     def get_AB (self, x, u, w) :
         return self.Df_x(x, u, w), self.Df_u(x, u, w)
 
-class NNCSystem :
+class NNCNLSystem :
     def __init__(self, sys:NLSystem, nn:NeuralNetwork, method='jacobian',
                  dist:Disturbance=NoDisturbance(1)) -> None:
         self.sys = sys
@@ -49,7 +49,76 @@ class NNCSystem :
         n = len(_xx_) // 2
         _x = _xx_[:n]; x_ = _xx_[n:]
         if self.method == 'jacobian' :
-            pass
+            intx = IntervalMatrix.fromlu(_x.reshape(-1,1), x_.reshape(-1,1))
+            # self.control.step_if(0, _x, x_)
+            intC = IntervalMatrix.fromlu(self.control._C, self.control.C_)
+            intd = IntervalMatrix.fromlu(self.control._d.reshape(-1,1), self.control.d_.reshape(-1,1))
+
+            _u, u_ = self.control.u_lb.reshape(-1), self.control.u_ub.reshape(-1)
+            intA, intB = self.sys.get_AB_bounds(_x, x_, 
+                _u, u_,\
+                self.dist._w(t,_x,x_), self.dist.w_(t,_x,x_))
+
+            # print(intA, intB, intC, intd)
+
+            n = len(_xx_) // 2
+
+            _Bp, _Bn = d_positive(intB.l, True)
+            B_p, B_n = d_positive(intB.u, True)
+            
+            _M = (intA.l + _Bn@intC.u + _Bp@intC.l)
+            M_ = (intA.u + B_p@intC.u + B_n@intC.l)
+            _Mm, _Mn = d_metzler(_M, True)
+            M_m, M_n = d_metzler(M_, True)
+
+            _d = _Mm@_x + _Mn@x_ - intA.l@_x - intB.l@_u + _Bp@intd.l.reshape(-1) + _Bn@intd.u.reshape(-1) + self.sys.f(_x, _u, [0])[0].reshape(-1)
+            d_ = M_m@x_ + M_n@_x - intA.u@_x - intB.u@_u + B_p@intd.u.reshape(-1) + B_n@intd.l.reshape(-1) + self.sys.f(_x, _u, [0])[0].reshape(-1)
+            _d = _Mm@_x + _Mn@x_ - intA.l@_x - intB.l@_u + _Bp@intd.l.reshape(-1) + _Bn@intd.u.reshape(-1) + self.sys.f(_x, _u, [0])[0].reshape(-1)
+            d_ = M_m@x_ + M_n@_x - intA.u@_x - intB.u@_u + B_p@intd.u.reshape(-1) + B_n@intd.l.reshape(-1) + self.sys.f(_x, _u, [0])[0].reshape(-1)
+            return np.concatenate((_d.reshape(-1), d_.reshape(-1)))
+
+            # ret = np.empty(2*n)
+            # for i in range(2*n) :
+            #     intM = intA + intB @ intC
+            #     xcent = (_x + x_) / 2; 
+            #     if i < n :
+            #         xcent[i%n] = _x[i%n] 
+            #     else :
+            #         xcent[i%n] = x_[i%n]
+            #     ucent = self.control.u(0, xcent)
+
+            #     _Mm, _Mn = d_metzler(intM.l, True)
+            #     M_m, M_n = d_metzler(intM.u, True)
+            #     _t1 = _Mm@_x + _Mn@x_
+            #     t1_ = M_m@x_ + M_n@_x
+            #     t1 = IntervalMatrix.fromlu(_t1.reshape(-1,1), t1_.reshape(-1,1))
+            #     t2 = intA@xcent.reshape(-1,1)
+            #     t3 = intB@intd 
+            #     t4 = intB@ucent.reshape(-1,1)
+            #     t5 = self.sys.f(xcent, ucent, [0])[0].reshape(-1,1)
+            #     print('\n')
+            #     print('_x', _x)
+            #     print('x_', x_)
+            #     print('xc', xcent)
+            #     print('uc', ucent)
+
+            #     print('t1', t1)
+            #     print('t2', t2)
+            #     print('t3', t3)
+            #     print('t4', t4)
+            #     print('t5', t5)
+
+            #     intf = t1 - t2 + t3 - t4 + t5
+            #     print('if', intf)
+            #     # intf = intM@intx - intA@xcent.reshape(-1,1) + intB@intd \
+            #     #        - intB@ucent.reshape(-1,1) + self.sys.f(xcent, ucent, [0])[0].reshape(-1,1)
+            #     # print(intf)
+            #     # print(intf.l)
+            #     # print(intf.u)
+            #     # return np.concatenate((intf.l.reshape(-1),intf.u.reshape(-1)))
+            #     res = np.concatenate((intf.l.reshape(-1),intf.u.reshape(-1)))
+            #     ret[i] = res[i]
+            # return ret
         elif self.method == 'interconnect' :
             n = len(_xx_) // 2
             ret = np.empty(2*n)
