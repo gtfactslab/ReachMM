@@ -103,32 +103,26 @@ class NNCSystem :
                     _B, B_ = get_lu(B)
                     _Bp, _Bn = d_positive(_B)
                     B_p, B_n = d_positive(B_)
+                    
+                    # Centered around _x
                     _L = _A + _Bp@self.control._C + _Bn@self.control.C_
                     L_ = A_ + B_p@self.control.C_ + B_n@self.control._C
                     _Lp, _Ln = d_positive(_L)
                     L_p, L_n = d_positive(L_)
-                    d_x1 = _Lp@_x + _Ln@x_ - _A@_x - _B@_u + self.sys.f(_x,_u,self.dist.w(t,_x))[0].reshape(-1)
-                    dx_1 = L_p@x_ + L_n@_x - A_@_x - B_@_u + self.sys.f(_x,_u,self.dist.w(t,_x))[0].reshape(-1)
-                    d_x2 = _Lp@_x + _Ln@x_ - _A@x_ - _B@u_ + self.sys.f(x_,u_,self.dist.w(t,x_))[0].reshape(-1)
-                    dx_2 = L_p@x_ + L_n@_x - A_@x_ - B_@u_ + self.sys.f(x_,u_,self.dist.w(t,x_))[0].reshape(-1)
-                    # return np.intersection(get_iarray(d_x1, dx_1),get_iarray(d_x2, dx_2))
-                    return get_iarray(d_x1, dx_1)
+                    f = self.sys.f(_x,_u,self.dist.w(t,_x))[0].reshape(-1)
+                    d_x1 = _Lp@_x + _Ln@x_ - _A@_x - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f
+                    dx_1 = L_p@x_ + L_n@_x - A_@_x - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f
 
-                    # print(B.shape, self.control.d.shape)
-                    # print('A')
-                    # print(A)
-                    # print('B')
-                    # print(B)
-                    # print('C')
-                    # print(self.control.C)
-                    # print('B@C')
-                    # print(B@self.control.C)
-                    # # print((A + B@self.control.C))
-                    # _ret = (A + B@self.control.C)@x - A@_x - B@_u + B@self.control.d + self.sys.f(_x, _u, self.dist.w(t,_x))[0].reshape(-1)
-                    # ret_ = (A + B@self.control.C)@x - A@x_ - B@u_ + B@self.control.d + self.sys.f(x_, u_, self.dist.w(t,x_))[0].reshape(-1)
-                    # print(_ret)
-                    # print(ret_)
-                    # return np.intersection(_ret, ret_)
+                    # Centered around x_
+                    _L = A_ + B_p@self.control._C + B_n@self.control.C_
+                    L_ = _A + _Bp@self.control.C_ + _Bn@self.control._C
+                    _Lp, _Ln = d_positive(_L)
+                    L_p, L_n = d_positive(L_)
+                    f = self.sys.f(x_,u_,self.dist.w(t,x_))[0].reshape(-1)
+                    d_x2 = _Lp@_x + _Ln@x_ - A_@x_ - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f
+                    dx_2 = L_p@x_ + L_n@_x - _A@x_ - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f
+                    return np.intersection(get_iarray(d_x1, dx_1),get_iarray(d_x2, dx_2))
+
             elif self.incl_method == 'interconnect' :
                 if self.sys.t_spec.type == 'continuous' :
                     ret = np.empty_like(x)
@@ -151,12 +145,6 @@ class NNCSystem :
 if __name__ == '__main__' :
     px, py, psi, v, u1, u2, w = sp.symbols('p_x p_y psi v u1 u2 w')
     beta = sp.atan(sp.tan(u2)/2)
-    # f_eqn = [
-    #     v*sp.cos(psi + beta), 
-    #     v*sp.sin(psi + beta), 
-    #     v*sp.sin(beta),
-    #     u1
-    # ]
     f_eqn = [
         v*sp.cos(psi + beta), 
         v*sp.sin(psi + beta), 
@@ -169,7 +157,7 @@ if __name__ == '__main__' :
         np.interval(-np.pi/4,np.pi/4)
     ])
 
-    t_spec = DiscretizedTimeSpec(0.125)
+    t_spec = DiscretizedTimeSpec(0.01)
     # t_spec = ContinuousTimeSpec(0.01,0.25)
     sys = NLSystem([px, py, psi, v], [u1, u2], [w], f_eqn, t_spec)
     net = NeuralNetwork('../examples/vehicle/models/100r100r2')
@@ -183,30 +171,31 @@ if __name__ == '__main__' :
     from interval import from_cent_pert
     cent = np.array([8,8,-2*np.pi/3,2])
     # pert = np.array([0.1,0.1,0.01,0.01])
-    pert = np.array([0.001,0.001,0.001,0.001])
-    # pert = np.array([0.01,0.01,0.01,0.01])
+    # pert = np.array([0.001,0.001,0.001,0.001])
+    pert = np.array([0.01,0.01,0.01,0.01])
     x0 = from_cent_pert(cent, pert)
 
     xx = np.empty((tu.shape[0]+1,tu.shape[1],) + (len(x0),),dtype=np.interval)
     xx[0,0,:] = x0
 
     import time
-    start = time.time()
-
-    for i, tt in enumerate(tu) :
-        clsys.control.prime(xx[i,0,:])
-        clsys.control.step(0, xx[i,0,:])
-        for j, t in enumerate(tt) :
-            # x = xx[i,j,:] + t_spec.t_step*clsys.func(t,xx[i,j,:])
-            xtp1 = clsys.func(t, xx[i,j,:])
-            if j == len(tt)-1 :
-                xx[i+1,0,:] = xtp1
-            else :
-                xx[i,j+1,:] = xtp1
-
-    # print(xx[:,0,:])
-
-    end = time.time()
-    print(end-start)
+    repeat_num = 10
+    times = []
+    for repeat in range(repeat_num) :
+        start = time.time()
+        for i, tt in enumerate(tu) :
+            clsys.control.prime(xx[i,0,:])
+            for j, t in enumerate(tt) :
+                clsys.control.step(0, xx[i,j,:])
+                # x = xx[i,j,:] + t_spec.t_step*clsys.func(t,xx[i,j,:])
+                xtp1 = clsys.func(t, xx[i,j,:])
+                if j == len(tt)-1 :
+                    xx[i+1,0,:] = xtp1
+                else :
+                    xx[i,j+1,:] = xtp1
+        end = time.time()
+        times.append(end - start)
+    
+    print(np.mean(times), '\pm', np.std(times))
 
     print(xx[:,0,:])
