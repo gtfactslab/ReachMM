@@ -1,4 +1,6 @@
 import numpy as np
+import interval
+from interval import get_iarray, get_lu
 import torch
 import torch.nn as nn
 from torch.autograd.functional import jacobian
@@ -7,7 +9,7 @@ from ReachMM.control import *
 from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
 from collections import defaultdict
 import os
-from ReachMM.decomp import d_metzler, d_positive
+# from ReachMM.decomp import d_metzler, d_positive
 
 
 class NeuralNetwork (nn.Module) :
@@ -71,7 +73,7 @@ class ScaledMSELoss (nn.MSELoss) :
         return super().__call__(output/self.scale, target/self.scale)
 
 class NeuralNetworkControl (Control) :
-    def __init__(self, nn, st=None, method='CROWN', mode='hybrid', bound_opts=None, device='cpu', x_len=None, u_len=None, verbose=False, custom_ops=None, model=None, **kwargs):
+    def __init__(self, nn, mode='hybrid', method='CROWN', bound_opts=None, device='cpu', x_len=None, u_len=None, uclip=np.interval(-np.inf,np.inf), verbose=False, custom_ops=None, model=None, **kwargs):
         super().__init__(u_len=nn[-1].out_features if u_len is None else u_len,mode=mode)
         self.x_len = nn[0].in_features if x_len is None else x_len
         self.global_input = torch.zeros([1,self.x_len], dtype=torch.float32)
@@ -83,23 +85,33 @@ class NeuralNetworkControl (Control) :
         self.required_A = defaultdict(set)
         self.required_A[self.bnn.output_name[0]].add(self.bnn.input_name[0])
         self._C = None
+        self.C_ = None
         self._Cp = None
         self._Cn = None
-        self.C_ = None
         self.C_p = None
         self.C_n = None
+        self.C = None
         self._d = None
         self.d_ = None
-        self.u_lb = None
-        self.u_ub = None
+        self.d = None
+        self.uclip = uclip
+        self._uclip, self.u_clip = get_lu(uclip)
         
     def u (self, t, x) :
-        xin = torch.tensor(x.astype(np.float32),device=self.device)
-        u = self.nn(xin).cpu().detach().numpy().reshape(-1)
-        return u
+        if x.dtype == np.interval :
+            # Assumes .prime was called beforehand.
+            u = (self.C @ x + self.d).reshape(-1)
+            return np.intersection(u, self.uclip)
+        else :
+            xin = torch.tensor(x.astype(np.float32),device=self.device)
+            u = self.nn(xin).cpu().detach().numpy().reshape(-1)
+            return np.clip(u, self._uclip,self.u_clip)
     
     # Primes the control if to work for a range of x_xh (finds _C, C_, _d, d_)
-    def prime (self, _x, x_) :
+    def prime (self, x) :
+        if x.dtype != np.interval :
+            raise Exception('Call prime with an interval array')
+        _x, x_ = get_lu(x)
         x_L = torch.tensor(_x.reshape(1,-1), dtype=torch.float32)
         x_U = torch.tensor(x_.reshape(1,-1), dtype=torch.float32)
         ptb = PerturbationLpNorm(norm=np.inf, x_L=x_L, x_U=x_U)
@@ -111,24 +123,9 @@ class NeuralNetworkControl (Control) :
 
         self._C = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['lA'].cpu().detach().numpy().reshape(self.u_len,-1)
         self.C_ = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['uA'].cpu().detach().numpy().reshape(self.u_len,-1)
-        self._d = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['lbias'].cpu().detach().numpy().reshape(-1,1)
-        self.d_ = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['ubias'].cpu().detach().numpy().reshape(-1,1)
         self._Cp, self._Cn = d_positive(self._C, True)
         self.C_p, self.C_n = d_positive(self.C_, True)
-
-        # if self.mode == 'disclti' or self.mode == 'ltv' :
-        #     if self.mode == 'ltv' :
-        #         self.A, self.B, self.c = self.get_ABc((x_xh[:h] + x_xh[h:])/2)
-        #         self.Bp, self.Bn = d_positive(self.B, True)
-        #     self._Mm, self._Mn = d_positive((self.A + self.Bp@self._C + self.Bn@self.C_), True)
-        #     self.M_m, self.M_n = d_positive((self.A + self.Bp@self.C_ + self.Bn@self._C), True)
-
-        #     J = jacobian(self.nn, torch.Tensor((x_xh[:h] + x_xh[h:])/2)).cpu().detach().numpy()
-        #     Acl = self.A + self.B@J
-        #     L, V  = np.linalg.eig(Acl)
-    
-    def _u (self, t, _x, x_) :
-        return (self._Cp @ _x.reshape(-1,1) + self._Cn @ x_.reshape(-1,1) + self._d).reshape(-1)
-
-    def u_ (self, t, _x, x_) :
-        return (self.C_p @ x_.reshape(-1,1) + self.C_n @ _x.reshape(-1,1) + self.d_).reshape(-1)
+        self.C = get_iarray(self._C, self.C_)
+        self._d = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['lbias'].cpu().detach().numpy().reshape(-1)
+        self.d_ = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['ubias'].cpu().detach().numpy().reshape(-1)
+        self.d = get_iarray(self._d, self.d_)
