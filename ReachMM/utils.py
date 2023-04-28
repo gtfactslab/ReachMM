@@ -4,12 +4,23 @@ from numpy import diag_indices_from, clip, inf, empty
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.collections import LineCollection
+from tqdm import tqdm
 
 def run_time (func, *args, **kwargs) :
     before = time.time()
     ret = func(*args, **kwargs)
     after = time.time()
     return ret, (after - before)
+
+def run_times (N, func, *args, **kwargs) :
+    times = np.empty(N)
+    disable_bar = kwargs.get('disable_bar',False)
+    for n in tqdm(range(N), disable=disable_bar) :
+        before = time.time()
+        ret = func(*args, **kwargs)
+        after = time.time()
+        times[n] = (after - before)
+    return ret, times
 
 def uniform_disjoint (set, N) :
     probs = [s[1] - s[0] for s in set]; probs = probs / np.sum(probs)

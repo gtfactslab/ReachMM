@@ -4,7 +4,7 @@ import sympy as sp
 import interval
 from interval import get_lu, get_iarray
 from ReachMM.neural import NeuralNetwork, NeuralNetworkControl
-from ReachMM.control import Disturbance, NoDisturbance
+from ReachMM.control import Disturbance, NoDisturbance, Control
 from ReachMM.utils import d_metzler, d_positive
 from pprint import pformat
 from numba import jit
@@ -80,21 +80,53 @@ class NLSystem :
     def get_AB (self, x, u, w) :
         return self.Df_x(x, u, w)[0], self.Df_u(x, u, w)[0]
 
-class NNCSystem :
-    def __init__(self, sys:NLSystem, nn:NeuralNetwork, incl_method='jacobian', interc_mode=None,
-                 dist:Disturbance=NoDisturbance(1), uclip=np.interval(-np.inf,np.inf)) -> None:
+class ControlledSystem :
+    def __init__(self, sys:NLSystem, control:Control, interc_mode=None,
+                 dist:Disturbance=NoDisturbance(1)) :
         self.sys = sys
-        self.nn = nn
+        self.control = control
+
+        # Set default interconnection modes
         if interc_mode is None :
             if self.sys.t_spec.type == 'continuous' :
                 interc_mode = 'hybrid'
             else :
                 interc_mode = 'global'
-        self.control = NeuralNetworkControl(nn, interc_mode, uclip=uclip)
-        self.incl_method = incl_method
+
         self.dist = dist
     
+    # Abstract method returning x_{t+1} given x_t.
     def func (self, t, x) :
+        pass
+
+    def compute_trajectory (self, ti, tf, x0) :
+        tu = self.sys.t_spec.tu(0,6)
+
+        xx = np.empty((tu.shape[0]+1,tu.shape[1],) + (len(x0),),dtype=x0.dtype)
+        xx[0,0,:] = x0
+
+        for i, tt in enumerate(tu) :
+            self.control.prime(xx[i,0,:])
+            for j, t in enumerate(tt) :
+                self.control.step(0, xx[i,j,:])
+                xtp1 = self.func(t, xx[i,j,:])
+                if j == len(tt)-1 :
+                    xx[i+1,0,:] = xtp1
+                else :
+                    xx[i,j+1,:] = xtp1
+        
+        return xx
+
+class NNCSystem (ControlledSystem) :
+    def __init__(self, sys:NLSystem, nn:NeuralNetwork, incl_method='jacobian', interc_mode=None,
+                 dist:Disturbance=NoDisturbance(1), uclip=np.interval(-np.inf,np.inf)) -> None:
+        self.nn = nn
+        ControlledSystem.__init__(self, sys, NeuralNetworkControl(nn, interc_mode, uclip=uclip),
+                                  interc_mode, dist)
+        self.incl_method = incl_method
+    
+    def func (self, t, x) :
+        # Returns x_{t+1} given x_t (euler disc. for continuous time based on t_spec.t_step)
         # Assumes access to pre-computed control in self.control (call control.step before this)
 
         # Monotone Inclusion

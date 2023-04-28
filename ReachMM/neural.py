@@ -30,11 +30,11 @@ class NeuralNetwork (nn.Module) :
                 inputlen = int(a)
                 self.out_len = int(a)
             else :
-                if a == 'ReLU' :
+                if a.lower() == 'relu' :
                     self.mods.append(nn.ReLU())
-                elif a == 'Sigmoid' :
+                elif a.lower() == 'sigmoid' :
                     self.mods.append(nn.Sigmoid())
-                elif a == 'Tanh' :
+                elif a.lower() == 'tanh' :
                     self.mods.append(nn.Tanh())
 
         self.seq = nn.Sequential(*self.mods)
@@ -116,7 +116,8 @@ class NeuralNetworkControl (Control) :
     # Primes the control if to work for a range of x_xh (finds _C, C_, _d, d_)
     def prime (self, x) :
         if x.dtype != np.interval :
-            raise Exception('Call prime with an interval array')
+            return
+            # raise Exception('Call prime with an interval array')
         _x, x_ = get_lu(x)
         x_L = torch.tensor(_x.reshape(1,-1), dtype=torch.float32)
         x_U = torch.tensor(x_.reshape(1,-1), dtype=torch.float32)
