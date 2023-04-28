@@ -5,6 +5,7 @@ import interval
 from interval import get_lu, get_iarray
 from ReachMM.neural import NeuralNetwork, NeuralNetworkControl
 from ReachMM.control import Disturbance, NoDisturbance, Control
+from ReachMM.reach import Trajectory, Partition
 from ReachMM.utils import d_metzler, d_positive
 from pprint import pformat
 from numba import jit
@@ -99,11 +100,12 @@ class ControlledSystem :
     def func (self, t, x) :
         pass
 
-    def compute_trajectory (self, ti, tf, x0) :
+    def compute_trajectory (self, t0, tf, x0) :
         tu = self.sys.t_spec.tu(0,6)
 
-        xx = np.empty((tu.shape[0]+1,tu.shape[1],) + (len(x0),),dtype=x0.dtype)
-        xx[0,0,:] = x0
+        # xx = np.empty((tu.shape[0]+1,tu.shape[1],) + (len(x0),),dtype=x0.dtype)
+        # xx[0,0,:] = x0
+        xx = Trajectory(self.t_spec, t0, x0, tf)
 
         for i, tt in enumerate(tu) :
             self.control.prime(xx[i,0,:])
