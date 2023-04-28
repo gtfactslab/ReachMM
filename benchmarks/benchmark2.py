@@ -11,14 +11,14 @@ f_eqn = [
     u
 ]
 
-t_spec = ContinuousTimeSpec(0.01, 0.2)
+t_spec = ContinuousTimeSpec(0.1, 0.2)
 # t_spec = DiscretizedTimeSpec(0.1)
 # t_spec = DiscreteTimeSpec()
 sys = NLSystem([x1, x2], [u], [w], f_eqn, t_spec)
 net = NeuralNetwork('models/nn_2_relu')
 clsys = NNCSystem(sys, net, 'interconnect')
 print(clsys)
-print(net.state_dict())
+# print(net.state_dict())
 
 # x0 = np.array([ np.interval(0.8,0.81), np.interval(0.5,0.51) ])
 # x0 = np.array([ np.interval(0.8,0.825), np.interval(0.5,0.525) ])

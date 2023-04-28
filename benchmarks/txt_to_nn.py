@@ -4,56 +4,61 @@ import torch.nn as nn
 from ModuleFromTxt import ModuleFromTxt
 from ReachMM.neural import NeuralNetwork
 from pathlib import Path
+from numpy import identity
 
 base = Path('./models')
 model_dirs = [d for d in base.iterdir() if d.is_dir()]
-# model_dirs = [Path('nn_1_relu')]
 
-for model_dir in model_dirs[:1] :
-    print(f'Parsing model in {model_dir}')
+for model_dir in model_dirs :
+    print(f'\nParsing model in {model_dir}')
     model_name = model_dir.relative_to(base)
     with open(model_dir.joinpath(model_name), 'r') as txt :
         txt_read = txt.read().split()
 
+    # Making arch.txt
+    print(f'Creating {model_dir}/arch.txt')
     with open(model_dir.joinpath('arch.txt'), 'w') as arch :
-        arch.write(txt_read[0] + ' ')
+        arch.write(txt_read[0] + ' ') # number of inputs
+        num_layers = int(txt_read[2])
+        # hidden layers
+        for layer_i in range(num_layers) :
+            arch.write(txt_read[3 + layer_i] + ' ')
+            arch.write(txt_read[3 + num_layers + layer_i] + ' ')
+        # number of outputs
+        arch.write(txt_read[1] + ' ')
+        # extra activation
+        arch.write(txt_read[3 + num_layers + num_layers] + ' ')
+        # extra affine layer
+        arch.write(txt_read[1])
 
-# for subdir in subdirs :
-#     models_path = os.path.join(subdir, 'models')
-#     print('Looking for directories in', models_path)
+    idx = 3 + num_layers + num_layers + 1
 
-#     model_dirs = os.listdir(models_path) if os.path.isdir(models_path) else []
+    # Making a NeuralNetwork object, without any state dict loaded
+    net = NeuralNetwork(model_dir, load=False)
 
-#     for model_dir in model_dirs :
-#         full_model_path = os.path.join(models_path, model_dir)
-#         print('\n============')
-#         print('Converting', full_model_path)
-#         txt_model = ModuleFromTxt(os.path.join(full_model_path, model_dir))
-#         print('Txt Model Loaded.')
+    for layer in net.seq[:-1] :
+        if type(layer) == nn.Linear :
+            W = torch.empty_like(layer.weight)
+            b = torch.empty_like(layer.bias)
+            for i in range(W.shape[0]) :
+                for j in range(W.shape[1]) :
+                    W[i,j] = float(txt_read[idx])
+                    idx += 1
+                b[i] = float(txt_read[idx])
+                idx += 1
+            layer.weight = nn.Parameter(W)
+            layer.bias = nn.Parameter(b)
 
-#         mods = []
-        
-#         with open(os.path.join(full_model_path, 'arch.txt'), 'wt') as file :
-#             file.write(f'{txt_model.layers[0].in_features} ')
-#             for layer in txt_model.layers :
-#                 if type(layer) is nn.Linear :
-#                     file.write(f'{layer.out_features} ')
-#                 elif type(layer) is nn.ReLU :
-#                     file.write('ReLU ')
-#                 elif type(layer) is nn.Sigmoid :
-#                     file.write('Sigmoid ')
-#                 elif type(layer) is nn.Tanh :
-#                     file.write('Tanh ')
-#                 mods.append(layer)
-        
-#         # print(txt_model)
-        
-#         txt_model.seq = nn.Sequential(*mods)
-#         del(txt_model.layers)
+    # Last affine layer 
+    layer = net.seq[-1]
+    tmp = torch.ones_like(layer.bias)
+    tmp *= -1*float(txt_read[idx])
+    idx += 1
+    layer.bias = nn.Parameter(tmp.reshape(layer.bias.shape))
+    # tmp = torch.identity(layer.weight.shape).reshape(-1)
+    tmp = torch.tensor(identity(int(txt_read[1])))
+    tmp *= float(txt_read[idx])
+    idx += 1
+    layer.weight = nn.Parameter(tmp.reshape(layer.weight.shape))
 
-#         # print(txt_model)
-
-#         nn_model = NeuralNetwork(full_model_path, load=False)
-#         print(nn_model)
-#         nn_model.load_state_dict(txt_model.state_dict())
-#         nn_model.save()
+    net.save()

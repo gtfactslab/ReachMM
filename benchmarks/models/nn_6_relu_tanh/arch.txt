@@ -1,0 +1,1 @@
+4 20 ReLU 20 ReLU 20 ReLU 1 tanh 1

@@ -1,1 +1,1 @@
-3 
+3 100 tanh 100 tanh 100 tanh 1 tanh 1
