@@ -24,20 +24,28 @@ class TimeSpec :
     
     def tu (self, ti, tf) :
         return np.arange(ti, tf + self.u_step, self.t_step).reshape((-1,round(self.u_step/self.t_step)))
-
+    
 class DiscreteTimeSpec (TimeSpec) :
     def __init__(self) -> None:
         super().__init__('discrete', 1, 1)
+    def __str__(self) -> str:
+        return f'Discrete'
 
 class DiscretizedTimeSpec (TimeSpec) :
     def __init__(self, t_step) -> None:
         super().__init__('discretized', t_step, t_step)
+
+    def __str__(self) -> str:
+        return f'Discretized (t_step: {self.t_step})'
 
 class ContinuousTimeSpec (TimeSpec) :
     def __init__(self, t_step, u_step) -> None:
         if t_step > u_step :
             raise Exception('t_step should be smaller than u_step in ContinuousTimeSpec')
         super().__init__('continuous', t_step, u_step)
+
+    def __str__(self) -> str:
+        return f'Continuous (t_step: {self.t_step}, u_step: {self.u_step})'
 
 class NLSystem :
     def __init__(self, x_vars, u_vars, w_vars, f_eqn, t_spec:TimeSpec) -> None:
@@ -61,27 +69,28 @@ class NLSystem :
         self.f    = sp.lambdify(tuple, self.f_eqn, 'numpy', cse=my_cse)
         self.f_i  = [sp.lambdify(tuple, f_eqn_i, 'numpy', cse=my_cse) for f_eqn_i in self.f_eqn]
 
-        print(self.f_eqn.jacobian(x_vars))
         self.Df_x = sp.lambdify(tuple, self.f_eqn.jacobian(x_vars), 'numpy', cse=my_cse)
-        # self.Df_x = sp.lambdify(tuple, self.f_eqn.jacobian(x_vars), 'numpy')
-        # print(getsource(self.Df_x))
         self.Df_u = sp.lambdify(tuple, self.f_eqn.jacobian(u_vars), 'numpy', cse=my_cse)
         self.Df_w = sp.lambdify(tuple, self.f_eqn.jacobian(w_vars), 'numpy', cse=my_cse)
+
+    def __str__ (self) :
+        return f'''Nonlinear {self.t_spec.__str__()} System with 
+            \r  {'xdot' if self.t_spec.type == 'continuous' or self.t_spec.type == 'discretized' else 'x+'} = f(x,u,w) = {self.f_eqn.__str__()}'''
 
     def get_AB (self, x, u, w) :
         return self.Df_x(x, u, w)[0], self.Df_u(x, u, w)[0]
 
 class NNCSystem :
-    def __init__(self, sys:NLSystem, nn:NeuralNetwork, incl_method='jacobian', cont_mode=None,
-                 dist:Disturbance=NoDisturbance(1), uclip=None) -> None:
+    def __init__(self, sys:NLSystem, nn:NeuralNetwork, incl_method='jacobian', interc_mode=None,
+                 dist:Disturbance=NoDisturbance(1), uclip=np.interval(-np.inf,np.inf)) -> None:
         self.sys = sys
         self.nn = nn
-        if cont_mode is None :
+        if interc_mode is None :
             if self.sys.t_spec.type == 'continuous' :
-                cont_mode = 'hybrid'
+                interc_mode = 'hybrid'
             else :
-                cont_mode = 'global'
-        self.control = NeuralNetworkControl(nn, cont_mode, uclip=uclip)
+                interc_mode = 'global'
+        self.control = NeuralNetworkControl(nn, interc_mode, uclip=uclip)
         self.incl_method = incl_method
         self.dist = dist
     
@@ -139,8 +148,16 @@ class NNCSystem :
                     # print(x, self.control.iuCALC, self.dist.w(t,x))
                     return self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
         else :
-            return self.sys.f(x,self.control.uCALC,self.dist(t,x))[0]
+            if self.sys.t_spec.type == 'continuous' :
+                return x + self.sys.t_spec.t_step*self.sys.f(x,self.control.uCALC,self.dist.w(t,x))[0].reshape(-1)
+            else :
+                return self.sys.f(x,self.control.uCALC,self.dist.w(t,x))[0].reshape(-1)
 
+    def __str__ (self) :
+        return f'''===== Closed Loop System Definition =====
+            \r{self.sys.__str__()}
+            \rcontrolled by {self.control.__str__()}
+            \rusing the {self.incl_method} monotone inclusion function'''
 
 if __name__ == '__main__' :
     px, py, psi, v, u1, u2, w = sp.symbols('p_x p_y psi v u1 u2 w')

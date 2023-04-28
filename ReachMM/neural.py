@@ -18,6 +18,7 @@ class NeuralNetwork (nn.Module) :
 
         self.dir = dir
         self.mods = []
+        self.out_len = None
         with open(os.path.join(dir, 'arch.txt')) as f :
             arch = f.read().split()
 
@@ -27,9 +28,14 @@ class NeuralNetwork (nn.Module) :
             if a.isdigit() :
                 self.mods.append(nn.Linear(inputlen,int(a)))
                 inputlen = int(a)
+                self.out_len = int(a)
             else :
                 if a == 'ReLU' :
                     self.mods.append(nn.ReLU())
+                elif a == 'Sigmoid' :
+                    self.mods.append(nn.Sigmoid())
+                elif a == 'Tanh' :
+                    self.mods.append(nn.Tanh())
 
         self.seq = nn.Sequential(*self.mods)
 
@@ -74,7 +80,7 @@ class ScaledMSELoss (nn.MSELoss) :
 
 class NeuralNetworkControl (Control) :
     def __init__(self, nn, mode='hybrid', method='CROWN', bound_opts=None, device='cpu', x_len=None, u_len=None, uclip=np.interval(-np.inf,np.inf), verbose=False, custom_ops=None, model=None, **kwargs):
-        super().__init__(u_len=nn[-1].out_features if u_len is None else u_len,mode=mode)
+        super().__init__(u_len=nn.out_len if u_len is None else u_len,mode=mode)
         self.x_len = nn[0].in_features if x_len is None else x_len
         self.global_input = torch.zeros([1,self.x_len], dtype=torch.float32)
         self.nn = nn
@@ -129,3 +135,6 @@ class NeuralNetworkControl (Control) :
         self._d = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['lbias'].cpu().detach().numpy().reshape(-1)
         self.d_ = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['ubias'].cpu().detach().numpy().reshape(-1)
         self.d = get_iarray(self._d, self.d_)
+    
+    def __str__(self) -> str:
+        return f'neural network controller with {self.nn.seq.__str__()}, {self.mode} mode'
