@@ -81,7 +81,6 @@ class ControlledSystem :
             # self.prime(xx[i,0,:])
             self.prime(xx(tt[0]))
             for j, t in enumerate(tt) :
-                self.control.step(t, xx(t))
                 xx.set(t + self.sys.t_spec.t_step, self.func(t, xx(t)))
 
                 # if j == len(tt)-1 :
@@ -109,67 +108,71 @@ class NNCSystem (ControlledSystem) :
         ControlledSystem.__init__(self, sys, NeuralNetworkControl(nn, interc_mode, uclip=uclip),
                                   interc_mode, dist)
         self.incl_method = incl_method
-        self.e_x = None
-        self.ex_ = None
+        self.e = None
+        self.uj = None
     
     def prime (self, x):
         self.control.prime(x)
         if self.incl_method == 'jacobian' :
             if self.sys.t_spec.type == 'continuous' :
-                self.e_x = np.zeros(self.sys.f_len, dtype=np.interval)
-                self.ex_ = np.zeros(self.sys.f_len, dtype=np.interval)
+                self.e = np.zeros(self.sys.f_len, dtype=np.interval)
+                self.control.step(0, x)
+                self.uj = self.control.iuCALC
     
     def func (self, t, x) :
         # Returns x_{t+1} given x_t (euler disc. for continuous time based on t_spec.t_step)
         # Assumes access to pre-computed control in self.control (call control.step before this)
+
+        self.control.step(t, x)
 
         # Monotone Inclusion
         if x.dtype == np.interval :
             if self.incl_method == 'jacobian' :
                 if self.sys.t_spec.type == 'continuous' :
                     _x, x_ = get_lu(x)
-                    _u, u_ = get_lu(self.control.iuCALC)
-                    A, B = self.sys.get_AB(x, self.control.iuCALC, self.dist.w(t,x))
+                    _u, u_ = get_lu(self.uj)
+                    A, B = self.sys.get_AB(x, self.uj, self.dist.w(t,x))
                     _A, A_ = get_lu(A)
                     _B, B_ = get_lu(B)
                     _Bp, _Bn = d_positive(_B)
                     B_p, B_n = d_positive(B_)
                     
+                    # Bounding the difference: error dynamics
+                    self.control.step(0, x)
+                    self.e = self.e + self.sys.t_spec.t_step * self.f_replace(x)
+                    _e, e_ = get_lu(self.e)
+
                     # Centered around _x
+                    _K = _Bp@self.control._C + _Bn@self.control.C_
+                    K_ = B_p@self.control.C_ + B_n@self.control._C
+                    _Kp, _Kn = d_positive(_K)
+                    K_p, K_n = d_positive(K_)
 
-                    # Bounding the difference
-                    print('p: ', self.e_x)
-                    self.control.step(0,self._x)
-                    print(self.f_replace(self.e_x))
-                    self.e_x = self.e_x + self.sys.t_spec.t_step * self.f_replace(self.e_x)
-                    _e, e_ = get_lu(self.e_x)
-                    print('a: ', self.e_x)
-
-                    _L = _A + _Bp@self.control._C + _Bn@self.control.C_
-                    L_ = A_ + B_p@self.control.C_ + B_n@self.control._C
+                    _L = _A + _K
+                    L_ = A_ + K_
                     _Lp, _Ln = d_metzler(_L)
                     L_p, L_n = d_metzler(L_)
                     f = self.sys.f(_x,_u,self.dist.w(t,_x))[0].reshape(-1)
-                    d_x1 = _Lp@_x + _Ln@x_ - _A@_x - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f + _e
-                    dx_1 = L_p@x_ + L_n@_x - A_@_x - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f + e_
+                    print(- _Kp@e_ - _Kn@_e)
+                    d_x1 = _Lp@_x + _Ln@x_ - _Kp@e_ - _Kn@_e - _A@_x - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f + _e
+                    dx_1 = L_p@x_ + L_n@_x - K_p@_e - K_n@e_ - A_@_x - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f + e_
 
                     # Centered around x_
+                    _K = B_p@self.control._C + B_n@self.control.C_
+                    K_ = _Bp@self.control.C_ + _Bn@self.control._C
+                    _Kp, _Kn = d_positive(_K)
+                    K_p, K_n = d_positive(K_)
 
-                    # Bounding the difference
-                    self.control.step(0,self.ex_)
-                    self.ex_ += self.sys.t_spec.t_step * self.f_replace(self.ex_)
-                    _e, e_ = get_lu(self.ex_)
-
-                    _L = A_ + B_p@self.control._C + B_n@self.control.C_
-                    L_ = _A + _Bp@self.control.C_ + _Bn@self.control._C
+                    _L = A_ + _K
+                    L_ = _A + K_
                     _Lp, _Ln = d_metzler(_L)
                     L_p, L_n = d_metzler(L_)
                     f = self.sys.f(x_,u_,self.dist.w(t,x_))[0].reshape(-1)
-                    d_x2 = _Lp@_x + _Ln@x_ - A_@x_ - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f + _e
-                    dx_2 = L_p@x_ + L_n@_x - _A@x_ - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f + e_
+                    d_x2 = _Lp@_x + _Ln@x_ - _Kp@e_ - _Kn@_e - A_@x_ - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f + _e
+                    dx_2 = L_p@x_ + L_n@_x - K_p@_e - K_n@e_ - _A@x_ - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f + e_
 
                     # Take the intersection of the two decompositions
-                    return np.intersection(get_iarray(d_x1, dx_1),get_iarray(d_x2, dx_2))
+                    return x + self.sys.t_spec.t_step * np.intersection(get_iarray(d_x1, dx_1),get_iarray(d_x2, dx_2))
                     # raise NotImplementedError('jacobian method for continuous mode not implemented')
                 else :
                     _x, x_ = get_lu(x)
@@ -201,7 +204,7 @@ class NNCSystem (ControlledSystem) :
 
             elif self.incl_method == 'interconnect' :
                 if self.sys.t_spec.type == 'continuous' :
-                    return x + self.sys.t_spec.t_step*self.f_replace(x, self.control.iuCALC_x, self.control.iuCALCx_)
+                    return x + self.sys.t_spec.t_step*self.f_replace(x)
                 else :
                     # print(x, self.control.iuCALC, self.dist.w(t,x))
                     return self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
@@ -234,11 +237,11 @@ if __name__ == '__main__' :
     ])
 
     # t_spec = DiscretizedTimeSpec(0.1)
-    t_spec = ContinuousTimeSpec(0.01,0.25)
+    t_spec = ContinuousTimeSpec(0.01,0.1)
     sys = NLSystem([px, py, psi, v], [u1, u2], [w], f_eqn, t_spec)
     net = NeuralNetwork('../examples/vehicle/models/100r100r2')
-    clsys = NNCSystem(sys, net, 'jacobian', uclip=uclip)
-    # clsys = NNCSystem(sys, net, 'interconnect', uclip=uclip)
+    # clsys = NNCSystem(sys, net, 'jacobian', uclip=uclip)
+    clsys = NNCSystem(sys, net, 'interconnect', uclip=uclip)
 
     t_span = [0,1]
     # tt = t_spec.tt(0,1)
@@ -262,5 +265,5 @@ if __name__ == '__main__' :
     
     # print(np.mean(times), '\pm', np.std(times))
 
-    # print(xx(np.arange(0,1+0,0.25)))
-    print(xx(t_spec.tt(0,1)))
+    print(xx(np.arange(0,1+0.1,0.1)))
+    # print(xx(t_spec.tt(0,1)))
