@@ -44,7 +44,8 @@ class Control :
         else :
             self.uCALC = self.u (t, x)
             return self.uCALC
-    
+
+
     def __call__(self, t, x) : 
         return self.step(t,x)
 

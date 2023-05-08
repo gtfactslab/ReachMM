@@ -13,7 +13,7 @@ class TimeSpec :
         return np.arange(ti, tf + self.t_step, self.t_step)
     
     def tu (self, ti, tf) :
-        return np.arange(ti, tf + self.u_step, self.t_step).reshape((-1,round(self.u_step/self.t_step)))
+        return np.arange(ti, tf, self.t_step).reshape((-1,round(self.u_step/self.t_step)))
     
 class DiscreteTimeSpec (TimeSpec) :
     def __init__(self) -> None:

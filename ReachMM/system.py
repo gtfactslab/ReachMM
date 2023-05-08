@@ -59,6 +59,7 @@ class ControlledSystem :
             else :
                 interc_mode = 'global'
 
+        self.control.mode = interc_mode
         self.dist = dist
     
     # Abstract method returning x_{t+1} given x_t.
@@ -78,16 +79,28 @@ class ControlledSystem :
 
         for i, tt in enumerate(tu) :
             # self.prime(xx[i,0,:])
-            self.prime(tt[0])
+            self.prime(xx(tt[0]))
             for j, t in enumerate(tt) :
-                self.control.step(0, xx[i,j,:])
-                xtp1 = self.func(t, xx[i,j,:])
-                if j == len(tt)-1 :
-                    xx[i+1,0,:] = xtp1
-                else :
-                    xx[i,j+1,:] = xtp1
+                self.control.step(t, xx(t))
+                xx.set(t + self.sys.t_spec.t_step, self.func(t, xx(t)))
+
+                # if j == len(tt)-1 :
+                #     xx[i+1,0,:] = xtp1
+                # else :
+                #     xx[i,j+1,:] = xtp1
         
         return xx
+    
+    def f_replace (self, x) :
+        ret = np.empty_like(x)
+        for i in range(len(x)) :
+            xi = np.copy(x); xi[i].vec[1] = x[i].vec[0]
+            _reti = self.sys.f_i[i] (xi, self.control.iuCALC_x[i,:], self.dist.w(0,xi))[0]
+            xi[i].vec[1] = x[i].vec[1]; xi[i].vec[0] = x[i].vec[1]
+            ret_i = self.sys.f_i[i] (xi, self.control.iuCALCx_[i,:], self.dist.w(0,xi))[0]
+            ret[i] = np.intersection(_reti, ret_i)
+        return ret
+
 
 class NNCSystem (ControlledSystem) :
     def __init__(self, sys:NLSystem, nn:NeuralNetwork, incl_method='jacobian', interc_mode=None,
@@ -96,16 +109,15 @@ class NNCSystem (ControlledSystem) :
         ControlledSystem.__init__(self, sys, NeuralNetworkControl(nn, interc_mode, uclip=uclip),
                                   interc_mode, dist)
         self.incl_method = incl_method
-
-        self.e_x = np.zeros(self.sys.f_len, dtype=np.interval)
-        self.ex_ = np.zeros(self.sys.f_len, dtype=np.interval)
+        self.e_x = None
+        self.ex_ = None
     
     def prime (self, x):
         self.control.prime(x)
         if self.incl_method == 'jacobian' :
             if self.sys.t_spec.type == 'continuous' :
-                self.e_x = np.zeros(len(self.sys.f_len), dtype=np.interval)
-                self.ex_ = np.zeros(len(self.sys.f_len), dtype=np.interval)
+                self.e_x = np.zeros(self.sys.f_len, dtype=np.interval)
+                self.ex_ = np.zeros(self.sys.f_len, dtype=np.interval)
     
     def func (self, t, x) :
         # Returns x_{t+1} given x_t (euler disc. for continuous time based on t_spec.t_step)
@@ -126,33 +138,35 @@ class NNCSystem (ControlledSystem) :
                     # Centered around _x
 
                     # Bounding the difference
-                    # _e_x, e__x = get_lu(self.e_x)
-
-                    # e_u = (_Bp@self.control._C + _Bn@self.control.C_)@_x
-                    # e_iuCALC_x = 
-                    # self.e += self.sys.t_spec.t_step * self.sys.()[0].reshape(-1)
-                    self.e += self.sys.t_spec.t_step * self.f_replace()
+                    print('p: ', self.e_x)
+                    self.control.step(0,self._x)
+                    print(self.f_replace(self.e_x))
+                    self.e_x = self.e_x + self.sys.t_spec.t_step * self.f_replace(self.e_x)
+                    _e, e_ = get_lu(self.e_x)
+                    print('a: ', self.e_x)
 
                     _L = _A + _Bp@self.control._C + _Bn@self.control.C_
                     L_ = A_ + B_p@self.control.C_ + B_n@self.control._C
                     _Lp, _Ln = d_metzler(_L)
                     L_p, L_n = d_metzler(L_)
                     f = self.sys.f(_x,_u,self.dist.w(t,_x))[0].reshape(-1)
-                    d_x1 = _Lp@_x + _Ln@x_ - _A@_x - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f
-                    dx_1 = L_p@x_ + L_n@_x - A_@_x - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f
+                    d_x1 = _Lp@_x + _Ln@x_ - _A@_x - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f + _e
+                    dx_1 = L_p@x_ + L_n@_x - A_@_x - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f + e_
 
                     # Centered around x_
 
                     # Bounding the difference
-                    _ex_, e_x_ = get_lu(self.ex_)
+                    self.control.step(0,self.ex_)
+                    self.ex_ += self.sys.t_spec.t_step * self.f_replace(self.ex_)
+                    _e, e_ = get_lu(self.ex_)
 
                     _L = A_ + B_p@self.control._C + B_n@self.control.C_
                     L_ = _A + _Bp@self.control.C_ + _Bn@self.control._C
                     _Lp, _Ln = d_metzler(_L)
                     L_p, L_n = d_metzler(L_)
                     f = self.sys.f(x_,u_,self.dist.w(t,x_))[0].reshape(-1)
-                    d_x2 = _Lp@_x + _Ln@x_ - A_@x_ - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f
-                    dx_2 = L_p@x_ + L_n@_x - _A@x_ - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f
+                    d_x2 = _Lp@_x + _Ln@x_ - A_@x_ - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f + _e
+                    dx_2 = L_p@x_ + L_n@_x - _A@x_ - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f + e_
 
                     # Take the intersection of the two decompositions
                     return np.intersection(get_iarray(d_x1, dx_1),get_iarray(d_x2, dx_2))
@@ -198,16 +212,6 @@ class NNCSystem (ControlledSystem) :
             else :
                 return self.sys.f(x,self.control.uCALC,self.dist.w(t,x))[0].reshape(-1)
 
-    def f_replace (self, x, iuCALC_x, iuCALCx_) :
-        ret = np.empty_like(x)
-        for i in range(len(x)) :
-            xi = np.copy(x); xi[i].vec[1] = x[i].vec[0]
-            _reti = self.sys.f_i[i] (xi, iuCALC_x[i,:], self.dist.w(t,xi))[0]
-            xi[i].vec[1] = x[i].vec[1]; xi[i].vec[0] = x[i].vec[1]
-            ret_i = self.sys.f_i[i] (xi, iuCALCx_[i,:], self.dist.w(t,xi))[0]
-            ret[i] = np.intersection(_reti, ret_i)
-        return ret
-
     def __str__ (self) :
         return f'''===== Closed Loop System Definition =====
             \r{self.sys.__str__()}
@@ -229,46 +233,34 @@ if __name__ == '__main__' :
         np.interval(-np.pi/4,np.pi/4)
     ])
 
-    # t_spec = DiscretizedTimeSpec(0.01)
+    # t_spec = DiscretizedTimeSpec(0.1)
     t_spec = ContinuousTimeSpec(0.01,0.25)
     sys = NLSystem([px, py, psi, v], [u1, u2], [w], f_eqn, t_spec)
     net = NeuralNetwork('../examples/vehicle/models/100r100r2')
-    # clsys = NNCSystem(sys, net, 'jacobian', uclip=uclip)
-    clsys = NNCSystem(sys, net, 'interconnect', uclip=uclip)
+    clsys = NNCSystem(sys, net, 'jacobian', uclip=uclip)
+    # clsys = NNCSystem(sys, net, 'interconnect', uclip=uclip)
 
+    t_span = [0,1]
     # tt = t_spec.tt(0,1)
     # print(t_spec.tu(0,2))
-    tu = t_spec.tu(0,1)
 
     from interval import from_cent_pert
     cent = np.array([8,8,-2*np.pi/3,2])
-    # pert = np.array([0.1,0.1,0.01,0.01])
+    pert = np.array([0.1,0.1,0.01,0.01])
     # pert = np.array([0.001,0.001,0.001,0.001])
-    pert = np.array([0.01,0.01,0.01,0.01])
+    # pert = np.array([0.01,0.01,0.01,0.01])
     x0 = from_cent_pert(cent, pert)
 
-    xx = np.empty((tu.shape[0]+1,tu.shape[1],) + (len(x0),),dtype=np.interval)
-    xx[0,0,:] = x0
-
     import time
-    repeat_num = 10
+    repeat_num = 1
     times = []
     for repeat in range(repeat_num) :
         start = time.time()
-        # for i, tt in enumerate(tu) :
-        #     clsys.control.prime(xx[i,0,:])
-        #     for j, t in enumerate(tt) :
-        #         clsys.control.step(0, xx[i,j,:])
-        #         # x = xx[i,j,:] + t_spec.t_step*clsys.func(t,xx[i,j,:])
-        #         xtp1 = clsys.func(t, xx[i,j,:])
-        #         if j == len(tt)-1 :
-        #             xx[i+1,0,:] = xtp1
-        #         else :
-        #             xx[i,j+1,:] = xtp1
-        xx = clsys.compute_trajectory(0,1,x0)
+        xx = clsys.compute_trajectory(t_span[0],t_span[1],x0)
         end = time.time()
         times.append(end - start)
     
     # print(np.mean(times), '\pm', np.std(times))
 
-    print(xx[:,0,:])
+    # print(xx(np.arange(0,1+0,0.25)))
+    print(xx(t_spec.tt(0,1)))
