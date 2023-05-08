@@ -1,6 +1,6 @@
 import numpy as np
 import interval
-from interval import is_iarray
+from interval import get_lu, get_iarray
 from ReachMM.utils import d_positive
 
 class Control :
@@ -55,6 +55,28 @@ class LinearControl (Control) :
 
     def u (self, t, x) :
         return self.K @ x
+
+# class AffineControl (Control) :
+#     def __init__(self, C, d, _C=None, _d=None, C_=None, d_=None, u_clip=np.interval(-np.inf, np.inf), mode='hybrid'):
+#         super().__init__(C.shape[0], mode)
+#         self.C = C
+#         self.d = d
+#         self._C = _C
+#         self._d = _d
+#         self.C_ = C_
+#         self.d_ = d_
+
+#     @classmethod
+#     def from_perturbed (cls, _C, C_, _d, d_) :
+#         return cls(None, None, _C, C_, _d, d_)
+    
+#     def u (self, t, x) :
+#         if x.dtype == np.interval and self._C is not None :
+#             _x, x_ = get_lu(x)
+#             _u = self._C
+#         else :
+#             return self.C @ x + self.d
+
 
 class Disturbance :
     def __init__(self, w_len) :

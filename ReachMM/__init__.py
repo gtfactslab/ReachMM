@@ -1,4 +1,5 @@
 # Usage: from ReachMM import ControlFunction
+from .time import *
 from .control import *
 from .system import *
 from .reach import *

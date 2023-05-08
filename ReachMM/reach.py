@@ -14,7 +14,7 @@ class Trajectory :
         tlen = len(self.t_spec.tt(t0,t_alloc))
         self.xx = np.empty((tlen,)+x0.shape, x0.dtype)
         # self.xx = np.empty((tu.shape[0]+1,tu.shape[1],) + (len(x0),),dtype=x0.dtype)
-        self._n = lambda t : np.round(t/self.t_spec.tf)
+        self._n = lambda t : np.round(t/self.t_spec.t_step).astype(int)
         self.set(t0,x0)
 
     def set (self, t, x) :

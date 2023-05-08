@@ -106,7 +106,11 @@ class NeuralNetworkControl (Control) :
     def u (self, t, x) :
         if x.dtype == np.interval :
             # Assumes .prime was called beforehand.
-            u = (self.C @ x + self.d).reshape(-1)
+            # u = (self.C @ x + self.d).reshape(-1)
+            _x, x_ = get_lu(x)
+            _u = self._Cp @ _x + self._Cn @ x_ + self._d
+            u_ = self.C_p @ x_ + self.C_n @ _x + self.d_
+            u = get_iarray(_u, u_)
             return np.intersection(u, self.uclip)
         else :
             xin = torch.tensor(x.astype(np.float32),device=self.device)
