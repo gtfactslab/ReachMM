@@ -13,8 +13,8 @@ def _benchmark1 (N) :
         u*x2**2 - x1
     ]
 
-    t_spec = ContinuousTimeSpec(0.01, 0.2)
-    # t_spec = DiscretizedTimeSpec(0.2)
+    t_spec = ContinuousTimeSpec(0.05, 0.05)
+    # t_spec = DiscretizedTimeSpec(0.05)
     # t_spec = DiscreteTimeSpec()
     sys = NLSystem([x1, x2], [u], [w], f_eqn, t_spec)
     net = NeuralNetwork('models/nn_1_relu')
@@ -23,15 +23,17 @@ def _benchmark1 (N) :
 
     # x0 = np.array([ np.interval(0.8,0.81), np.interval(0.5,0.51) ])
     x0 = np.array([ np.interval(0.8,0.9), np.interval(0.5,0.6) ])
+    # x0 = np.array([ np.interval(0.8,0.801), np.interval(0.5,0.501) ])
     # x0 = np.array([ 0.85, 0.55 ])
     # print(clsys.control.u(0,x0))
+    
+    t_end = 3
 
-    xx = clsys.compute_trajectory(0, 1, x0)
-    # xx, times = run_times(1, clsys.compute_trajectory, 0, 6, x0)
+    # xx = clsys.compute_trajectory(0, t_end, x0)
+    xx, times = run_times(1, clsys.compute_trajectory, 0, t_end, x0)
+    print(np.mean(times), '\pm', np.std(times))
 
-    # print(np.mean(times), '\pm', np.std(times))
-
-    print(xx(t_spec.uu(0, 1)).reshape(-1,2))
+    print(xx(t_spec.tt(0, t_end)).reshape(-1,2))
 
     # plt.plot(xx[:-1,:,0].reshape(-1), xx[:-1,:,1].reshape(-1))
     # plt.show()

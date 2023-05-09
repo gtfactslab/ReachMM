@@ -6,11 +6,32 @@ from interval import get_lu, get_iarray
 from ReachMM.time import *
 from ReachMM.neural import NeuralNetwork, NeuralNetworkControl
 from ReachMM.control import Disturbance, NoDisturbance, Control
-from ReachMM.reach import Trajectory
 from ReachMM.utils import d_metzler, d_positive
 from pprint import pformat
 from numba import jit
 from inspect import getsource
+
+class Trajectory :
+    def __init__(self, t_spec:TimeSpec, t0, x0, t_alloc=None) -> None:
+        self.t_spec = t_spec
+        self.t0 = t0
+        self.tf = t0
+        t_alloc = t0 + 10 if t_alloc is None else t_alloc
+        self.xx = np.empty((self.t_spec.lentt(t0,t_alloc)+1,) + x0.shape, x0.dtype)
+
+        self._n = lambda t : np.round(t/self.t_spec.t_step).astype(int)
+        self.set(t0,x0)
+
+    def set (self, t, x) :
+        if self._n(t) > self._n(self.tf) :
+            self.tf = t
+        self.xx[self._n(t),:] = x
+
+    def __call__(self, t) :
+        if np.any(self._n(t) > self._n(self.tf)) or np.any(self._n(t) < self._n(self.t0)) :
+            raise Exception(f'trajectory not defined at {t} \\notin [{self.t0},{self.tf}]')
+        return self.xx[self._n(t),:]
+
 
 class NLSystem :
     def __init__(self, x_vars, u_vars, w_vars, f_eqn, t_spec:TimeSpec) -> None:
@@ -142,6 +163,10 @@ class NNCSystem (ControlledSystem) :
                     _u, u_ = get_lu(self.uj)
                     A, B = self.sys.get_AB(x, self.uj, self.dist.w(t,x))
                     _A, A_ = get_lu(A)
+                    _Ap, _An = d_metzler(_A)
+                    A_p, A_n = d_metzler(A_)
+                    m_Ap, m_An = d_metzler(-_A)
+                    mA_p, mA_n = d_metzler(-A_)
                     _B, B_ = get_lu(B)
                     _Bp, _Bn = d_positive(_B)
                     B_p, B_n = d_positive(B_)
@@ -153,46 +178,46 @@ class NNCSystem (ControlledSystem) :
                     K_ = B_p@self.control.C_ + B_n@self.control._C
                     _Kp, _Kn = d_positive(_K)
                     K_p, K_n = d_positive(K_)
-
+                    _c = - _Kn@_e - _Kp@e_ 
+                    c_ = - K_n@e_ - K_p@_e
                     _L = _A + _K
                     L_ = A_ + K_
                     _Lp, _Ln = d_metzler(_L)
                     L_p, L_n = d_metzler(L_)
                     f = self.sys.f(_x,_u,self.dist.w(t,_x))[0].reshape(-1)
-                    print('\n_c: ', - _Kp@e_ - _Kn@_e)
-                    print('c_: ', - K_p@_e - K_n@e_)
-                    d_x1 = _Lp@_x + _Ln@x_ - _Kp@e_ - _Kn@_e - _A@_x - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f + _e
-                    dx_1 = L_p@x_ + L_n@_x - K_p@_e - K_n@e_ - A_@_x - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f + e_
+                    d_x1 = _Lp@_x + _Ln@x_ + _c + m_Ap@_x + m_An@x_ - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f
+                    dx_1 = L_p@x_ + L_n@_x + c_ -  A_n@x_ -  A_p@_x - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f
 
                     # Centered around x_
                     _K = B_p@self.control._C + B_n@self.control.C_
                     K_ = _Bp@self.control.C_ + _Bn@self.control._C
                     _Kp, _Kn = d_positive(_K)
                     K_p, K_n = d_positive(K_)
-
+                    _c = - _Kn@_e - _Kp@e_ 
+                    c_ = - K_n@e_ - K_p@_e
                     _L = A_ + _K
                     L_ = _A + K_
                     _Lp, _Ln = d_metzler(_L)
                     L_p, L_n = d_metzler(L_)
                     f = self.sys.f(x_,u_,self.dist.w(t,x_))[0].reshape(-1)
-                    d_x2 = _Lp@_x + _Ln@x_ - _Kp@e_ - _Kn@_e - A_@x_ - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f + _e
-                    dx_2 = L_p@x_ + L_n@_x - K_p@_e - K_n@e_ - _A@x_ - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f + e_
-
+                    d_x2 = _Lp@_x + _Ln@x_ + _c -  A_n@_x -  A_p@x_ - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f
+                    dx_2 = L_p@x_ + L_n@_x + c_ + m_Ap@x_ + m_An@_x - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f
 
                     # Bounding the difference: error dynamics
                     self.control.step(0, x)
-                    print('p: ', self.e)
-                    # self.e = self.e + self.sys.t_spec.t_step * self.f_replace(x)
                     self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
-                    print('a: ', self.e)
 
                     # Take the intersection of the two decompositions
-                    return x + self.sys.t_spec.t_step * np.intersection(get_iarray(d_x1, dx_1),get_iarray(d_x2, dx_2))
-                    # raise NotImplementedError('jacobian method for continuous mode not implemented')
+                    print(get_iarray(d_x1, dx_1),get_iarray(d_x2, dx_2))
+                    # return x + self.sys.t_spec.t_step * np.intersection(get_iarray(d_x1, dx_1),get_iarray(d_x2, dx_2))
+                    # return np.intersection(x + self.sys.t_spec.t_step * get_iarray(d_x1, dx_1),
+                    #                        x + self.sys.t_spec.t_step * get_iarray(d_x2, dx_2))
+                    return x + self.sys.t_spec.t_step * get_iarray(d_x1, dx_1)
                 else :
                     _x, x_ = get_lu(x)
                     _u, u_ = get_lu(self.control.iuCALC)
                     A, B = self.sys.get_AB(x, self.control.iuCALC, self.dist.w(t,x))
+
                     _A, A_ = get_lu(A)
                     _B, B_ = get_lu(B)
                     _Bp, _Bn = d_positive(_B)
