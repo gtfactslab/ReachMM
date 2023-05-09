@@ -93,10 +93,13 @@ class ControlledSystem :
     def f_replace (self, x) :
         ret = np.empty_like(x)
         for i in range(len(x)) :
-            xi = np.copy(x); xi[i].vec[1] = x[i].vec[0]
+            xi = np.copy(x); xi[i].u = x[i].l
             _reti = self.sys.f_i[i] (xi, self.control.iuCALC_x[i,:], self.dist.w(0,xi))[0]
-            xi[i].vec[1] = x[i].vec[1]; xi[i].vec[0] = x[i].vec[1]
+            # print(f'f({xi}, {self.control.iuCALC_x[i,:]})')
+            xi[i].u = x[i].u; xi[i].l = x[i].u
             ret_i = self.sys.f_i[i] (xi, self.control.iuCALCx_[i,:], self.dist.w(0,xi))[0]
+            # print(f'f({xi}, {self.control.iuCALCx_[i,:]})')
+            # print(_reti, ret_i)
             ret[i] = np.intersection(_reti, ret_i)
         return ret
 
@@ -139,7 +142,9 @@ class NNCSystem (ControlledSystem) :
                     
                     # Bounding the difference: error dynamics
                     self.control.step(0, x)
+                    print('\np: ', self.e)
                     self.e = self.e + self.sys.t_spec.t_step * self.f_replace(x)
+                    print('a: ', self.e)
                     _e, e_ = get_lu(self.e)
 
                     # Centered around _x
@@ -153,7 +158,8 @@ class NNCSystem (ControlledSystem) :
                     _Lp, _Ln = d_metzler(_L)
                     L_p, L_n = d_metzler(L_)
                     f = self.sys.f(_x,_u,self.dist.w(t,_x))[0].reshape(-1)
-                    print(- _Kp@e_ - _Kn@_e)
+                    print('_c: ', - _Kp@e_ - _Kn@_e)
+                    print('c_: ', - K_p@_e - K_n@e_)
                     d_x1 = _Lp@_x + _Ln@x_ - _Kp@e_ - _Kn@_e - _A@_x - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f + _e
                     dx_1 = L_p@x_ + L_n@_x - K_p@_e - K_n@e_ - A_@_x - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f + e_
 
@@ -240,8 +246,8 @@ if __name__ == '__main__' :
     t_spec = ContinuousTimeSpec(0.01,0.1)
     sys = NLSystem([px, py, psi, v], [u1, u2], [w], f_eqn, t_spec)
     net = NeuralNetwork('../examples/vehicle/models/100r100r2')
-    # clsys = NNCSystem(sys, net, 'jacobian', uclip=uclip)
-    clsys = NNCSystem(sys, net, 'interconnect', uclip=uclip)
+    clsys = NNCSystem(sys, net, 'jacobian', uclip=uclip)
+    # clsys = NNCSystem(sys, net, 'interconnect', uclip=uclip)
 
     t_span = [0,1]
     # tt = t_spec.tt(0,1)
