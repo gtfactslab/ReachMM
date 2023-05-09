@@ -6,7 +6,7 @@ from interval import get_lu, get_iarray
 from ReachMM.time import *
 from ReachMM.neural import NeuralNetwork, NeuralNetworkControl
 from ReachMM.control import Disturbance, NoDisturbance, Control
-from ReachMM.reach import Trajectory, Partition
+from ReachMM.reach import Trajectory
 from ReachMM.utils import d_metzler, d_positive
 from pprint import pformat
 from numba import jit
@@ -62,32 +62,36 @@ class ControlledSystem :
         self.control.mode = interc_mode
         self.dist = dist
     
-    # Abstract method returning x_{t+1} given x_t.
+    # Returns x_{t+1} given x_t.
     def func (self, t, x) :
-        pass
+        self.control.step(t, x)
+
+        # Monotone Inclusion
+        if x.dtype == np.interval :
+            if self.sys.t_spec.type == 'continuous' :
+                # Interconnection mode by default
+                return x + self.sys.t_spec.t_step*self.f_replace(x)
+            else :
+                return self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
+        # Deterministic system
+        else :
+            if self.sys.t_spec.type == 'continuous' :
+                return x + self.sys.t_spec.t_step*self.sys.f(x,self.control.uCALC,self.dist.w(t,x))[0].reshape(-1)
+            else :
+                return self.sys.f(x,self.control.uCALC,self.dist.w(t,x))[0].reshape(-1)
 
     # Abstract method to prepare for the next control interval.
     def prime (self, x) :
         self.control.prime(x)
 
     def compute_trajectory (self, t0, tf, x0) :
-        tu = self.sys.t_spec.tu(t0, tf)
-
-        # xx = np.empty((tu.shape[0]+1,tu.shape[1],) + (len(x0),),dtype=x0.dtype)
-        # xx[0,0,:] = x0
         xx = Trajectory(self.sys.t_spec, t0, x0, tf)
 
-        for i, tt in enumerate(tu) :
-            # self.prime(xx[i,0,:])
+        for tt in self.sys.t_spec.tu(t0, tf) :
             self.prime(xx(tt[0]))
             for j, t in enumerate(tt) :
                 xx.set(t + self.sys.t_spec.t_step, self.func(t, xx(t)))
 
-                # if j == len(tt)-1 :
-                #     xx[i+1,0,:] = xtp1
-                # else :
-                #     xx[i,j+1,:] = xtp1
-        
         return xx
     
     def f_replace (self, x) :
@@ -103,6 +107,8 @@ class ControlledSystem :
             ret[i] = np.intersection(_reti, ret_i)
         return ret
 
+class AutonomousSystem (ControlledSystem) :
+    pass
 
 class NNCSystem (ControlledSystem) :
     def __init__(self, sys:NLSystem, nn:NeuralNetwork, incl_method='jacobian', interc_mode=None,
@@ -139,12 +145,7 @@ class NNCSystem (ControlledSystem) :
                     _B, B_ = get_lu(B)
                     _Bp, _Bn = d_positive(_B)
                     B_p, B_n = d_positive(B_)
-                    
-                    # Bounding the difference: error dynamics
-                    self.control.step(0, x)
-                    print('\np: ', self.e)
-                    self.e = self.e + self.sys.t_spec.t_step * self.f_replace(x)
-                    print('a: ', self.e)
+
                     _e, e_ = get_lu(self.e)
 
                     # Centered around _x
@@ -158,7 +159,7 @@ class NNCSystem (ControlledSystem) :
                     _Lp, _Ln = d_metzler(_L)
                     L_p, L_n = d_metzler(L_)
                     f = self.sys.f(_x,_u,self.dist.w(t,_x))[0].reshape(-1)
-                    print('_c: ', - _Kp@e_ - _Kn@_e)
+                    print('\n_c: ', - _Kp@e_ - _Kn@_e)
                     print('c_: ', - K_p@_e - K_n@e_)
                     d_x1 = _Lp@_x + _Ln@x_ - _Kp@e_ - _Kn@_e - _A@_x - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f + _e
                     dx_1 = L_p@x_ + L_n@_x - K_p@_e - K_n@e_ - A_@_x - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f + e_
@@ -176,6 +177,14 @@ class NNCSystem (ControlledSystem) :
                     f = self.sys.f(x_,u_,self.dist.w(t,x_))[0].reshape(-1)
                     d_x2 = _Lp@_x + _Ln@x_ - _Kp@e_ - _Kn@_e - A_@x_ - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f + _e
                     dx_2 = L_p@x_ + L_n@_x - K_p@_e - K_n@e_ - _A@x_ - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f + e_
+
+
+                    # Bounding the difference: error dynamics
+                    self.control.step(0, x)
+                    print('p: ', self.e)
+                    # self.e = self.e + self.sys.t_spec.t_step * self.f_replace(x)
+                    self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
+                    print('a: ', self.e)
 
                     # Take the intersection of the two decompositions
                     return x + self.sys.t_spec.t_step * np.intersection(get_iarray(d_x1, dx_1),get_iarray(d_x2, dx_2))
@@ -214,7 +223,7 @@ class NNCSystem (ControlledSystem) :
                 else :
                     # print(x, self.control.iuCALC, self.dist.w(t,x))
                     return self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
-        # No disturbance system
+        # Deterministic system
         else :
             if self.sys.t_spec.type == 'continuous' :
                 return x + self.sys.t_spec.t_step*self.sys.f(x,self.control.uCALC,self.dist.w(t,x))[0].reshape(-1)

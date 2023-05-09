@@ -1,4 +1,5 @@
 import numpy as np
+from math import ceil
 
 class TimeSpec :
     def __init__(self, type, t_step, u_step) -> None:
@@ -9,12 +10,18 @@ class TimeSpec :
         # Control Update time
         self.u_step = u_step
 
+    def lentt (self, ti, tf) :
+        return ceil((tf + self.t_step - ti)/self.t_step)
+
     def tt (self, ti, tf) :
         return np.arange(ti, tf + self.t_step, self.t_step)
     
     def tu (self, ti, tf) :
         return np.arange(ti, tf, self.t_step).reshape((-1,round(self.u_step/self.t_step)))
     
+    def lenuu (self, ti, tf) :
+        return ceil((tf + self.u_step - ti)/self.u_step)
+
     def uu (self, ti, tf) :
         return np.arange(ti, tf + self.u_step, self.u_step)
     
