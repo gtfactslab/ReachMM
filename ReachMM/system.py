@@ -19,7 +19,7 @@ class Trajectory :
         t_alloc = t0 + 10 if t_alloc is None else t_alloc
         self.xx = np.empty((self.t_spec.lentt(t0,t_alloc)+1,) + x0.shape, x0.dtype)
 
-        self._n = lambda t : np.round(t/self.t_spec.t_step).astype(int)
+        self._n = lambda t : np.round((t - self.t0)/self.t_spec.t_step).astype(int)
         self.set(t0,x0)
 
     def set (self, t, x) :
@@ -28,10 +28,10 @@ class Trajectory :
         self.xx[self._n(t),:] = x
 
     def __call__(self, t) :
-        if np.any(self._n(t) > self._n(self.tf)) or np.any(self._n(t) < self._n(self.t0)) :
-            raise Exception(f'trajectory not defined at {t} \\notin [{self.t0},{self.tf}]')
+        not_def = np.logical_or(self._n(t) > self._n(self.tf), self._n(t) < self._n(self.t0))
+        if np.any(not_def) :
+            raise Exception(f'trajectory not defined at {t[not_def]} \\notin [{self.t0},{self.tf}]')
         return self.xx[self._n(t),:]
-
 
 class NLSystem :
     def __init__(self, x_vars, u_vars, w_vars, f_eqn, t_spec:TimeSpec) -> None:

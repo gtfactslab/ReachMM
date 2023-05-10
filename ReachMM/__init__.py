@@ -1,8 +1,8 @@
 # Usage: from ReachMM import ControlFunction
 from .time import *
+from .neural import *
 from .control import *
 from .system import *
 from .reach import *
-from .neural import *
-# Usage: from ReachMM.decomp import d_sin
+# Usage: from ReachMM.utils import run_time
 from . import utils
