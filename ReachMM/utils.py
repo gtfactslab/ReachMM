@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.collections import LineCollection
 from tqdm import tqdm
+import shapely.geometry as sg
+import shapely.ops as so
+
 
 def run_time (func, *args, **kwargs) :
     before = time.time()
@@ -157,3 +160,17 @@ def d_positive (B, separate=True) :
         ret[:n,:m] = Bp; ret[n:,m:] = Bp
         ret[:n,m:] = Bn; ret[n:,:m] = Bn
         return ret
+
+sg_box = lambda x, xi=0, yi=1 : sg.box(x[xi].l,x[yi].l,x[xi].u,x[yi].u)
+sg_boxes = lambda xx, xi=0, yi=0 : [sg_box(x, xi, yi) for x in xx]
+
+def draw_sg_union (ax, boxes, color='tab:blue') :
+    shape = so.unary_union(boxes)
+    xs, ys = shape.exterior.xy
+    ax.fill(xs, ys, alpha=1, fc='none', ec=color)
+
+draw_iarray = lambda ax, x, xi=0, yi=1, color='tab:blue' : draw_sg_union(ax, [sg_box(x, xi, yi)], color)
+draw_iarrays = lambda ax, xx, xi=0, yi=1, color='tab:blue' : [draw_sg_union(ax, [sg_box(x, xi, yi)], color) for x in xx]
+
+# def draw_iarray (ax, x, xi=0, yi=1, color='tab:blue') :
+#     draw_sg_union(sg_box(x, xi, yi))

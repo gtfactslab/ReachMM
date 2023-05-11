@@ -134,6 +134,9 @@ class NeuralNetworkControl (Control) :
 
         self._C = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['lA'].cpu().detach().numpy().reshape(self.u_len,-1)
         self.C_ = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['uA'].cpu().detach().numpy().reshape(self.u_len,-1)
+        # print('+++++++++++++++++++')
+        # print(self._C)
+        # print(self.C_)
         self._Cp, self._Cn = d_positive(self._C, True)
         self.C_p, self.C_n = d_positive(self.C_, True)
         self.C = get_iarray(self._C, self.C_)

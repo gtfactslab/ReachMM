@@ -2,7 +2,7 @@ from __future__ import annotations
 import numpy as np
 import sympy as sp
 import interval
-from interval import get_lu, get_iarray
+from interval import get_lu, get_iarray, has_nan
 from ReachMM.time import *
 from ReachMM.neural import NeuralNetwork, NeuralNetworkControl
 from ReachMM.control import Disturbance, NoDisturbance, Control
@@ -56,6 +56,7 @@ class NLSystem :
         self.f_i  = [sp.lambdify(tuple, f_eqn_i, 'numpy', cse=my_cse) for f_eqn_i in self.f_eqn]
         self.f_len = len(self.f_i)
 
+        print(self.f_eqn.jacobian(u_vars))
         self.Df_x = sp.lambdify(tuple, self.f_eqn.jacobian(x_vars), 'numpy', cse=my_cse)
         self.Df_u = sp.lambdify(tuple, self.f_eqn.jacobian(u_vars), 'numpy', cse=my_cse)
         self.Df_w = sp.lambdify(tuple, self.f_eqn.jacobian(w_vars), 'numpy', cse=my_cse)
@@ -120,11 +121,8 @@ class ControlledSystem :
         for i in range(len(x)) :
             xi = np.copy(x); xi[i].u = x[i].l
             _reti = self.sys.f_i[i] (xi, self.control.iuCALC_x[i,:], self.dist.w(0,xi))[0]
-            # print(f'f({xi}, {self.control.iuCALC_x[i,:]})')
             xi[i].u = x[i].u; xi[i].l = x[i].u
             ret_i = self.sys.f_i[i] (xi, self.control.iuCALCx_[i,:], self.dist.w(0,xi))[0]
-            # print(f'f({xi}, {self.control.iuCALCx_[i,:]})')
-            # print(_reti, ret_i)
             ret[i] = np.intersection(_reti, ret_i)
         return ret
 
@@ -163,17 +161,13 @@ class NNCSystem (ControlledSystem) :
                     _u, u_ = get_lu(self.uj)
                     A, B = self.sys.get_AB(x, self.uj, self.dist.w(t,x))
                     _A, A_ = get_lu(A)
-                    _Ap, _An = d_metzler(_A)
-                    A_p, A_n = d_metzler(A_)
-                    m_Ap, m_An = d_metzler(-_A)
-                    mA_p, mA_n = d_metzler(-A_)
                     _B, B_ = get_lu(B)
                     _Bp, _Bn = d_positive(_B)
                     B_p, B_n = d_positive(B_)
 
                     _e, e_ = get_lu(self.e)
 
-                    # Centered around _x
+                    # Centered around _x, _u
                     _K = _Bp@self.control._C + _Bn@self.control.C_
                     K_ = B_p@self.control.C_ + B_n@self.control._C
                     _Kp, _Kn = d_positive(_K)
@@ -185,10 +179,41 @@ class NNCSystem (ControlledSystem) :
                     _Lp, _Ln = d_metzler(_L)
                     L_p, L_n = d_metzler(L_)
                     f = self.sys.f(_x,_u,self.dist.w(t,_x))[0].reshape(-1)
-                    d_x1 = _Lp@_x + _Ln@x_ + _c + m_Ap@_x + m_An@x_ - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f
-                    dx_1 = L_p@x_ + L_n@_x + c_ -  A_n@x_ -  A_p@_x - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f
+                    d_x1 = _Lp@_x + _Ln@x_ + _c - _A@_x - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f
+                    dx_1 = L_p@x_ + L_n@_x + c_ - A_@_x - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f
 
-                    # Centered around x_
+
+                    # Centered around _x, u_
+                    _K = B_p@self.control._C + B_n@self.control.C_
+                    K_ = _Bp@self.control.C_ + _Bn@self.control._C
+                    _Kp, _Kn = d_positive(_K)
+                    K_p, K_n = d_positive(K_)
+                    _c = - _Kn@_e - _Kp@e_ 
+                    c_ = - K_n@e_ - K_p@_e
+                    _L = _A + _K
+                    L_ = A_ + K_
+                    _Lp, _Ln = d_metzler(_L)
+                    L_p, L_n = d_metzler(L_)
+                    f = self.sys.f(_x,u_,self.dist.w(t,_x))[0].reshape(-1)
+                    d_x2 = _Lp@_x + _Ln@x_ + _c - _A@_x - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f
+                    dx_2 = L_p@x_ + L_n@_x + c_ - A_@_x - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f
+
+                    # Centered around x_, _u
+                    _K = _Bp@self.control._C + _Bn@self.control.C_
+                    K_ = B_p@self.control.C_ + B_n@self.control._C
+                    _Kp, _Kn = d_positive(_K)
+                    K_p, K_n = d_positive(K_)
+                    _c = - _Kn@_e - _Kp@e_ 
+                    c_ = - K_n@e_ - K_p@_e
+                    _L = A_ + _K
+                    L_ = _A + K_
+                    _Lp, _Ln = d_metzler(_L)
+                    L_p, L_n = d_metzler(L_)
+                    f = self.sys.f(x_,_u,self.dist.w(t,x_))[0].reshape(-1)
+                    d_x3 = _Lp@_x + _Ln@x_ + _c - A_@x_ - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f
+                    dx_3 = L_p@x_ + L_n@_x + c_ - _A@x_ - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f
+
+                    # Centered around x_, u_
                     _K = B_p@self.control._C + B_n@self.control.C_
                     K_ = _Bp@self.control.C_ + _Bn@self.control._C
                     _Kp, _Kn = d_positive(_K)
@@ -200,19 +225,27 @@ class NNCSystem (ControlledSystem) :
                     _Lp, _Ln = d_metzler(_L)
                     L_p, L_n = d_metzler(L_)
                     f = self.sys.f(x_,u_,self.dist.w(t,x_))[0].reshape(-1)
-                    d_x2 = _Lp@_x + _Ln@x_ + _c -  A_n@_x -  A_p@x_ - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f
-                    dx_2 = L_p@x_ + L_n@_x + c_ + m_Ap@x_ + m_An@_x - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f
+                    d_x4 = _Lp@_x + _Ln@x_ + _c - A_@x_ - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f
+                    dx_4 = L_p@x_ + L_n@_x + c_ - _A@x_ - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f
+
+                    # Interconnection mode
+                    dx5 = self.f_replace(x)
+                    d_x5, dx_5 = get_lu(dx5)
 
                     # Bounding the difference: error dynamics
                     self.control.step(0, x)
                     self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
 
-                    # Take the intersection of the two decompositions
-                    print(get_iarray(d_x1, dx_1),get_iarray(d_x2, dx_2))
-                    # return x + self.sys.t_spec.t_step * np.intersection(get_iarray(d_x1, dx_1),get_iarray(d_x2, dx_2))
+                    # _xtp1 = _x + self.sys.t_spec.t_step * np.maximum(d_x1, d_x4)
+                    # x_tp1 = x_ + self.sys.t_spec.t_step * np.minimum(dx_1, dx_4)
+                    # _xtp1 = _x + self.sys.t_spec.t_step * np.maximum(np.maximum(d_x1,d_x2), np.maximum(d_x3, d_x4))
+                    # x_tp1 = x_ + self.sys.t_spec.t_step * np.minimum(np.minimum(dx_1,dx_2), np.minimum(dx_3, dx_4))
+                    _xtp1 = _x + self.sys.t_spec.t_step * np.maximum(np.maximum(np.maximum(d_x1,d_x2), np.maximum(d_x3, d_x4)), d_x5)
+                    x_tp1 = x_ + self.sys.t_spec.t_step * np.minimum(np.minimum(np.minimum(dx_1,dx_2), np.minimum(dx_3, dx_4)), dx_5)
+                    return get_iarray(_xtp1, x_tp1)
                     # return np.intersection(x + self.sys.t_spec.t_step * get_iarray(d_x1, dx_1),
                     #                        x + self.sys.t_spec.t_step * get_iarray(d_x2, dx_2))
-                    return x + self.sys.t_spec.t_step * get_iarray(d_x1, dx_1)
+                    # return x + self.sys.t_spec.t_step * get_iarray(d_x1, dx_1)
                 else :
                     _x, x_ = get_lu(x)
                     _u, u_ = get_lu(self.control.iuCALC)
@@ -238,9 +271,9 @@ class NNCSystem (ControlledSystem) :
                     _Lp, _Ln = d_positive(_L)
                     L_p, L_n = d_positive(L_)
                     f = self.sys.f(x_,u_,self.dist.w(t,x_))[0].reshape(-1)
-                    d_x2 = _Lp@_x + _Ln@x_ - A_@x_ - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f
-                    dx_2 = L_p@x_ + L_n@_x - _A@x_ - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f
-                    return np.intersection(get_iarray(d_x1, dx_1),get_iarray(d_x2, dx_2))
+                    d_x4 = _Lp@_x + _Ln@x_ - A_@x_ - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f
+                    dx_4 = L_p@x_ + L_n@_x - _A@x_ - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f
+                    return np.intersection(get_iarray(d_x1, dx_1),get_iarray(d_x4, dx_4))
 
             elif self.incl_method == 'interconnect' :
                 if self.sys.t_spec.type == 'continuous' :
@@ -277,13 +310,13 @@ if __name__ == '__main__' :
     ])
 
     # t_spec = DiscretizedTimeSpec(0.1)
-    t_spec = ContinuousTimeSpec(0.01,0.1)
+    t_spec = ContinuousTimeSpec(0.01,0.25)
     sys = NLSystem([px, py, psi, v], [u1, u2], [w], f_eqn, t_spec)
     net = NeuralNetwork('../examples/vehicle/models/100r100r2')
     clsys = NNCSystem(sys, net, 'jacobian', uclip=uclip)
     # clsys = NNCSystem(sys, net, 'interconnect', uclip=uclip)
 
-    t_span = [0,1]
+    t_span = [0,1.25]
     # tt = t_spec.tt(0,1)
     # print(t_spec.tu(0,2))
 
@@ -305,5 +338,6 @@ if __name__ == '__main__' :
     
     # print(np.mean(times), '\pm', np.std(times))
 
-    print(xx(np.arange(0,1+0.1,0.1)))
+    # print(xx(np.arange(0,1+0.1,0.1)))
+    print(xx(t_spec.tt(t_span[0], t_span[1])))
     # print(xx(t_spec.tt(0,1)))
