@@ -30,7 +30,7 @@ class Trajectory :
     def __call__(self, t) :
         not_def = np.logical_or(self._n(t) > self._n(self.tf), self._n(t) < self._n(self.t0))
         if np.any(not_def) :
-            raise Exception(f'trajectory not defined at {t[not_def]} \\notin [{self.t0},{self.tf}]')
+            raise Exception(f'Trajectory not defined at {t[not_def]} \\notin [{self.t0},{self.tf}]')
         return self.xx[self._n(t),:]
 
 class NLSystem :
@@ -66,7 +66,7 @@ class NLSystem :
             \r  {'xdot' if self.t_spec.type == 'continuous' or self.t_spec.type == 'discretized' else 'x+'} = f(x,u,w) = {self.f_eqn.__str__()}'''
 
     def get_AB (self, x, u, w) :
-        return self.Df_x(x, u, w)[0], self.Df_u(x, u, w)[0]
+        return self.Df_x(x, u, w)[0].astype(x.dtype), self.Df_u(x, u, w)[0].astype(x.dtype)
 
 class ControlledSystem :
     def __init__(self, sys:NLSystem, control:Control, interc_mode=None,
@@ -104,25 +104,32 @@ class ControlledSystem :
 
     # Abstract method to prepare for the next control interval.
     def prime (self, x) :
-        self.control.prime(x)
+        # self.control.prime(x)
+        pass
 
     def compute_trajectory (self, t0, tf, x0) :
         xx = Trajectory(self.sys.t_spec, t0, x0, tf)
 
         for tt in self.sys.t_spec.tu(t0, tf) :
+            self.control.prime(xx(tt[0]))
+            self.control.step(0,xx(tt[0]))
             self.prime(xx(tt[0]))
             for j, t in enumerate(tt) :
                 xx.set(t + self.sys.t_spec.t_step, self.func(t, xx(t)))
 
         return xx
     
-    def f_replace (self, x) :
+    def f_replace (self, x, iuCALC_x=None, iuCALCx_=None) :
         ret = np.empty_like(x)
+        if iuCALC_x is None :
+            iuCALC_x = self.control.iuCALC_x
+        if iuCALCx_ is None :
+            iuCALCx_ = self.control.iuCALCx_
         for i in range(len(x)) :
             xi = np.copy(x); xi[i].u = x[i].l
-            _reti = self.sys.f_i[i] (xi, self.control.iuCALC_x[i,:], self.dist.w(0,xi))[0]
+            _reti = self.sys.f_i[i] (xi, iuCALC_x[i,:], self.dist.w(0,xi))[0]
             xi[i].u = x[i].u; xi[i].l = x[i].u
-            ret_i = self.sys.f_i[i] (xi, self.control.iuCALCx_[i,:], self.dist.w(0,xi))[0]
+            ret_i = self.sys.f_i[i] (xi, iuCALCx_[i,:], self.dist.w(0,xi))[0]
             ret[i] = np.intersection(_reti, ret_i)
         return ret
 
@@ -138,25 +145,28 @@ class NNCSystem (ControlledSystem) :
         self.incl_method = incl_method
         self.e = None
         self.uj = None
+        self.ujCALCx_ = None
+        self.ujCALC_x = None
     
     def prime (self, x):
-        self.control.prime(x)
+        # self.control.prime(x)
         if self.incl_method == 'jacobian' :
             if self.sys.t_spec.type == 'continuous' :
                 self.e = np.zeros(self.sys.f_len, dtype=np.interval)
-                self.control.step(0, x)
-                self.uj = self.control.iuCALC
+                # self.control.step(0, x)
+                self.uj = np.copy(self.control.iuCALC)
+                self.ujCALCx_ = np.copy(self.control.iuCALCx_)
+                self.ujCALC_x = np.copy(self.control.iuCALC_x)
     
     def func (self, t, x) :
         # Returns x_{t+1} given x_t (euler disc. for continuous time based on t_spec.t_step)
         # Assumes access to pre-computed control in self.control (call control.step before this)
-
-        self.control.step(t, x)
-
         # Monotone Inclusion
         if x.dtype == np.interval :
             if self.incl_method == 'jacobian' :
                 if self.sys.t_spec.type == 'continuous' :
+                    # self.control.step(t, x)
+
                     _x, x_ = get_lu(x)
                     _u, u_ = get_lu(self.uj)
                     A, B = self.sys.get_AB(x, self.uj, self.dist.w(t,x))
@@ -174,6 +184,8 @@ class NNCSystem (ControlledSystem) :
                     K_p, K_n = d_positive(K_)
                     _c = - _Kn@_e - _Kp@e_ 
                     c_ = - K_n@e_ - K_p@_e
+                    # _c = 0
+                    # c_ = 0
                     _L = _A + _K
                     L_ = A_ + K_
                     _Lp, _Ln = d_metzler(_L)
@@ -229,21 +241,19 @@ class NNCSystem (ControlledSystem) :
                     dx_4 = L_p@x_ + L_n@_x + c_ - _A@x_ - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f
 
                     # Interconnection mode
-                    dx5 = self.f_replace(x)
+                    dx5 = self.f_replace(x, self.ujCALC_x, self.ujCALCx_)
                     d_x5, dx_5 = get_lu(dx5)
 
                     # Bounding the difference: error dynamics
                     self.control.step(0, x)
                     self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
 
-                    # _xtp1 = _x + self.sys.t_spec.t_step * np.maximum(d_x1, d_x4)
-                    # x_tp1 = x_ + self.sys.t_spec.t_step * np.minimum(dx_1, dx_4)
-                    # _xtp1 = _x + self.sys.t_spec.t_step * np.maximum(np.maximum(d_x1,d_x2), np.maximum(d_x3, d_x4))
-                    # x_tp1 = x_ + self.sys.t_spec.t_step * np.minimum(np.minimum(dx_1,dx_2), np.minimum(dx_3, dx_4))
-                    # _xtp1 = _x + self.sys.t_spec.t_step * np.maximum(np.maximum(np.maximum(d_x1,d_x2), np.maximum(d_x3, d_x4)), d_x5)
-                    # x_tp1 = x_ + self.sys.t_spec.t_step * np.minimum(np.minimum(np.minimum(dx_1,dx_2), np.minimum(dx_3, dx_4)), dx_5)
+                    # _xtp1 = _x + self.sys.t_spec.t_step * np.max(np.array([d_x1,d_x4]), axis=0)
+                    # x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([dx_1,dx_4]), axis=0)
+                    # _xtp1 = _x + self.sys.t_spec.t_step * d_x5
+                    # x_tp1 = x_ + self.sys.t_spec.t_step * dx_5
                     _xtp1 = _x + self.sys.t_spec.t_step * np.max(np.array([d_x1,d_x2,d_x3,d_x4,d_x5]), axis=0)
-                    x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([d_x1,d_x2,d_x3,d_x4,d_x5]), axis=0)
+                    x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([dx_1,dx_2,dx_3,dx_4,dx_5]), axis=0)
                     return get_iarray(_xtp1, x_tp1)
                     # return np.intersection(x + self.sys.t_spec.t_step * get_iarray(d_x1, dx_1),
                     #                        x + self.sys.t_spec.t_step * get_iarray(d_x2, dx_2))
@@ -312,13 +322,13 @@ if __name__ == '__main__' :
     ])
 
     # t_spec = DiscretizedTimeSpec(0.1)
-    t_spec = ContinuousTimeSpec(0.01,0.25)
+    t_spec = ContinuousTimeSpec(0.05,0.25)
     sys = NLSystem([px, py, psi, v], [u1, u2], [w], f_eqn, t_spec)
     net = NeuralNetwork('../examples/vehicle/models/100r100r2')
     clsys = NNCSystem(sys, net, 'jacobian', uclip=uclip)
     # clsys = NNCSystem(sys, net, 'interconnect', uclip=uclip)
 
-    t_span = [0,1.25]
+    t_span = [0,1]
     # tt = t_spec.tt(0,1)
     # print(t_spec.tu(0,2))
 
@@ -329,17 +339,22 @@ if __name__ == '__main__' :
     # pert = np.array([0.01,0.01,0.01,0.01])
     x0 = from_cent_pert(cent, pert)
 
-    import time
-    repeat_num = 1
-    times = []
-    for repeat in range(repeat_num) :
-        start = time.time()
-        xx = clsys.compute_trajectory(t_span[0],t_span[1],x0)
-        end = time.time()
-        times.append(end - start)
+    from ReachMM.utils import run_times, draw_iarrays
+
+    xx, times = run_times(10, clsys.compute_trajectory, t_span[0],t_span[1],x0)
+    print(np.mean(times), '\pm', np.std(times))
     
-    # print(np.mean(times), '\pm', np.std(times))
+    tt = t_spec.tt(t_span[0],t_span[1])
+    rs = xx(tt)
 
     # print(xx(np.arange(0,1+0.1,0.1)))
-    print(xx(t_spec.tt(t_span[0], t_span[1])))
+    # print(xx(t_spec.tt(t_span[0], t_span[1])))
     # print(xx(t_spec.tt(0,1)))
+
+    import matplotlib.pyplot as plt
+
+    traj = clsys.compute_trajectory(t_span[0], t_span[1], cent)
+    plt.plot(traj(tt)[:,0], traj(tt)[:,1])
+    plt.scatter(traj(tt)[:,0], traj(tt)[:,1],s=5)
+    draw_iarrays(plt, rs)
+    plt.show()

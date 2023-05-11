@@ -2,7 +2,9 @@ import numpy as np
 import interval
 from interval import from_cent_pert
 import sympy as sp
+from ReachMM.time import *
 from ReachMM.system import *
+from ReachMM.reach import UniformPartitioner
 from ReachMM.utils import run_times, draw_iarrays
 import matplotlib.pyplot as plt
 
@@ -13,7 +15,7 @@ def _benchmark1 (N) :
         u*x2**2 - x1
     ]
 
-    t_spec = ContinuousTimeSpec(0.05, 0.2)
+    t_spec = ContinuousTimeSpec(0.05,0.2)
     # t_spec = DiscretizedTimeSpec(0.05)
     # t_spec = DiscreteTimeSpec()
     sys = NLSystem([x1, x2], [u], [w], f_eqn, t_spec)
@@ -21,17 +23,14 @@ def _benchmark1 (N) :
     clsys = NNCSystem(sys, net, 'jacobian')
     # clsys = NNCSystem(sys, net, 'interconnect')
 
-    t_end = 7
+    t_end = 5
 
     traj = clsys.compute_trajectory(0, t_end, np.array([ 0.85, 0.55 ]))
+    x0 = np.array([ np.interval(0.825,0.85), np.interval(0.525,0.55) ])
+    # x0 = np.array([ np.interval(0.8,0.9), np.interval(0.5,0.6) ])
+    # x0 = np.array([ np.interval(0.849,0.851), np.interval(0.549,0.551) ])
 
-    # x0 = np.array([ np.interval(0.81,0.811), np.interval(0.51,0.511) ])
-    # x0 = np.array([ np.interval(0.8,0.9), np.interval(0.5,0.6) ])
-    x0 = np.array([ np.interval(0.849,0.851), np.interval(0.549,0.551) ])
-    # x0 = np.array([ np.interval(0.8,0.9), np.interval(0.5,0.6) ])
-    # x0 = np.array([ np.interval(0.8,0.81), np.interval(0.5,0.51) ])
-    # x0 = np.array([np.interval(0.89,  1.1), np.interval(-0.36, -0.15)])
-    # x0 = np.array([ np.interval(0.8,0.805), np.interval(0.5,0.505) ])
+    partitioner = UniformPartitioner(clsys)
 
     xx, times = run_times(10, clsys.compute_trajectory, 0, t_end, x0)
     print(np.mean(times), '\pm', np.std(times))
