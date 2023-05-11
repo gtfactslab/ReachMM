@@ -15,7 +15,7 @@ def _benchmark1 (N) :
         u*x2**2 - x1
     ]
 
-    t_spec = ContinuousTimeSpec(0.05,0.2)
+    t_spec = ContinuousTimeSpec(0.025,0.2)
     # t_spec = DiscretizedTimeSpec(0.05)
     # t_spec = DiscreteTimeSpec()
     sys = NLSystem([x1, x2], [u], [w], f_eqn, t_spec)
@@ -23,26 +23,26 @@ def _benchmark1 (N) :
     clsys = NNCSystem(sys, net, 'jacobian')
     # clsys = NNCSystem(sys, net, 'interconnect')
 
-    t_end = 5
+    t_end = 7
 
     traj = clsys.compute_trajectory(0, t_end, np.array([ 0.85, 0.55 ]))
-    x0 = np.array([ np.interval(0.825,0.85), np.interval(0.525,0.55) ])
-    # x0 = np.array([ np.interval(0.8,0.9), np.interval(0.5,0.6) ])
+    # x0 = np.array([ np.interval(0.825,0.85), np.interval(0.525,0.55) ])
+    x0 = np.array([ np.interval(0.8,0.9), np.interval(0.5,0.6) ])
     # x0 = np.array([ np.interval(0.849,0.851), np.interval(0.549,0.551) ])
 
     partitioner = UniformPartitioner(clsys)
-
-    xx, times = run_times(10, clsys.compute_trajectory, 0, t_end, x0)
+    rs, times = run_times(1, partitioner.compute_reachable_set,0,t_end,x0,0,0)
+    tt = t_spec.tt(0, t_end)
+    print(rs(tt))
     print(np.mean(times), '\pm', np.std(times))
 
-    tt = t_spec.tt(0, t_end)
-    rs = xx(tt)
-    print(np.norm(rs))
-    print(t_spec.lenuu(0,t_end))
+    # xx, times = run_times(10, clsys.compute_trajectory, 0, t_end, x0)
 
+    # rs = xx(tt)
     plt.plot(traj(tt)[:,0], traj(tt)[:,1])
-    plt.scatter(traj(tt)[:,0], traj(tt)[:,1],s=5)
-    draw_iarrays(plt, rs)
+    # plt.scatter(traj(tt)[:,0], traj(tt)[:,1],s=5)
+    # draw_iarrays(plt, rs(tt))
+    rs.draw_rs(plt, t_spec.uu(0,t_end))
     plt.show()
 
 if __name__ == '__main__' :

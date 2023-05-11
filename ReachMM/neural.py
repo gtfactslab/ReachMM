@@ -134,15 +134,16 @@ class NeuralNetworkControl (Control) :
 
         self._C = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['lA'].cpu().detach().numpy().reshape(self.u_len,-1)
         self.C_ = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['uA'].cpu().detach().numpy().reshape(self.u_len,-1)
-        # print('+++++++++++++++++++')
-        # print(self._C)
-        # print(self.C_)
         self._Cp, self._Cn = d_positive(self._C, True)
         self.C_p, self.C_n = d_positive(self.C_, True)
         self.C = get_iarray(self._C, self.C_)
         self._d = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['lbias'].cpu().detach().numpy().reshape(-1)
         self.d_ = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['ubias'].cpu().detach().numpy().reshape(-1)
         self.d = get_iarray(self._d, self.d_)
+        # print('\n_C', self._C)
+        # print('C_', self.C_)
+        # print('_d', self._d)
+        # print('d_', self.d_)
     
     def __str__(self) -> str:
         return f'neural network controller with {self.nn.seq.__str__()}, {self.mode} mode'

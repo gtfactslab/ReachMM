@@ -170,7 +170,7 @@ def draw_sg_union (ax, boxes, color='tab:blue') :
     ax.fill(xs, ys, alpha=1, fc='none', ec=color)
 
 draw_iarray = lambda ax, x, xi=0, yi=1, color='tab:blue' : draw_sg_union(ax, [sg_box(x, xi, yi)], color)
-draw_iarrays = lambda ax, xx, xi=0, yi=1, color='tab:blue' : [draw_sg_union(ax, [sg_box(x, xi, yi)], color) for x in xx]
+draw_iarrays = lambda ax, xx, xi=0, yi=1, color='tab:blue' : draw_sg_union(ax, sg_boxes(xx, xi, yi), color)
 
 # def draw_iarray (ax, x, xi=0, yi=1, color='tab:blue') :
 #     draw_sg_union(sg_box(x, xi, yi))
