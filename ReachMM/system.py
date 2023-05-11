@@ -240,8 +240,10 @@ class NNCSystem (ControlledSystem) :
                     # x_tp1 = x_ + self.sys.t_spec.t_step * np.minimum(dx_1, dx_4)
                     # _xtp1 = _x + self.sys.t_spec.t_step * np.maximum(np.maximum(d_x1,d_x2), np.maximum(d_x3, d_x4))
                     # x_tp1 = x_ + self.sys.t_spec.t_step * np.minimum(np.minimum(dx_1,dx_2), np.minimum(dx_3, dx_4))
-                    _xtp1 = _x + self.sys.t_spec.t_step * np.maximum(np.maximum(np.maximum(d_x1,d_x2), np.maximum(d_x3, d_x4)), d_x5)
-                    x_tp1 = x_ + self.sys.t_spec.t_step * np.minimum(np.minimum(np.minimum(dx_1,dx_2), np.minimum(dx_3, dx_4)), dx_5)
+                    # _xtp1 = _x + self.sys.t_spec.t_step * np.maximum(np.maximum(np.maximum(d_x1,d_x2), np.maximum(d_x3, d_x4)), d_x5)
+                    # x_tp1 = x_ + self.sys.t_spec.t_step * np.minimum(np.minimum(np.minimum(dx_1,dx_2), np.minimum(dx_3, dx_4)), dx_5)
+                    _xtp1 = _x + self.sys.t_spec.t_step * np.max(np.array([d_x1,d_x2,d_x3,d_x4,d_x5]), axis=0)
+                    x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([d_x1,d_x2,d_x3,d_x4,d_x5]), axis=0)
                     return get_iarray(_xtp1, x_tp1)
                     # return np.intersection(x + self.sys.t_spec.t_step * get_iarray(d_x1, dx_1),
                     #                        x + self.sys.t_spec.t_step * get_iarray(d_x2, dx_2))

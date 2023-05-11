@@ -1,6 +1,6 @@
 import numpy as np
 import interval
-from interval import width, get_half_intervals
+from interval import width, get_half_intervals, as_lu, as_iarray
 from ReachMM import TimeSpec
 from ReachMM.system import ControlledSystem
 import shapely.geometry as sg
@@ -32,19 +32,34 @@ class Partition :
         self._id = Partition._id
         Partition._id += 1
     
+    def set (self, t, x) :
+        if len(self.xx) == self._n(t) :
+            self.xx.append(x)
+            self.tf = t
+        else :
+            raise Exception(f"_n(t): {self._n(t)} is not n+1: {len(self.xx)}")
+
     def __call__(self,t) :
         t = np.atleast_1d(t)
+        tmask = t <= self.tf
+        t1 = t[tmask]
+        t2 = t[np.logical_not(tmask)]
+        xx1 = np.asarray(self.xx)[self._n(t1)]
+        if self.subpartitions is not None :
+            xx2_parts = as_lu(np.asarray([(subpart(t2)) for subpart in self.subpartitions]))
+            xx2_l = np.min(xx2_parts[:,:,:,0], axis=0)
+
         if self.subpartitions is None :
             not_def = np.logical_or(self._n(t) > self._n(self.tf), self._n(t) < self._n(self.t0))
             if np.any(not_def) :
                 raise Exception(f'trajectory not defined at {t[not_def]} \\notin [{self.t0},{self.tf}]')
             return self.xx[self._n(t),:]
     
-    def finish (self) :
-        self.xx = np.array(self.xx)
-        if self.subpartitions is not None :
-            for subpart in self.subpartitions :
-                subpart.finish()
+    # def finish (self) :
+    #     self.xx = np.array(self.xx)
+    #     if self.subpartitions is not None :
+    #         for subpart in self.subpartitions :
+    #             subpart.finish()
     
 
     # def t_min (self) :
