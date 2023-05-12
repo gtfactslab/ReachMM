@@ -17,7 +17,7 @@ def run_time (func, *args, **kwargs) :
 
 def run_times (N, func, *args, **kwargs) :
     times = np.empty(N)
-    disable_bar = kwargs.get('disable_bar',False)
+    disable_bar = kwargs.pop('rt_disable_bar',False)
     for n in tqdm(range(N), disable=disable_bar) :
         before = time.time()
         ret = func(*args, **kwargs)
@@ -42,6 +42,13 @@ def gen_ics_pert (x0, pert, N) :
     for i in range(len(x0)) :
         # X[:,i] = uniform_disjoint(range, N)
         X[:,i] = np.random.uniform(x0[i]-pert[i], x0[i]+pert[i], N)
+    return X
+
+def gen_ics_iarray (x0, N) :
+    X = np.empty((N, len(x0)))
+    for i in range(len(x0)) :
+        # X[:,i] = uniform_disjoint(range, N)
+        X[:,i] = np.random.uniform(x0[i].l, x0[i].u, N)
     return X
 
 def file_to_numpy (filenames) :
