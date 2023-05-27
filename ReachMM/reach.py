@@ -9,7 +9,7 @@ from ReachMM.utils import sg_box, sg_boxes, draw_iarrays
 import shapely.geometry as sg
 import shapely.ops as so
 from tqdm import tqdm
-
+import time
 class Partition :
     _id = 0
 
@@ -68,10 +68,10 @@ class Partition :
         else :
             raise Exception(f'Partition not defined at {t} \\notin [{self.t0}, {self.tf}]')
 
-    def draw_rs (self, ax, tt, xi=0, yi=1, color='tab:blue', draw_bb=False) :
-        tt = np.asarray(tt)
+    def draw_rs (self, ax, tt, xi=0, yi=1, color='tab:blue', **kwargs) :
+        tt = np.atleast_1d(tt)
         for t in tt :
-            draw_iarrays(ax, self.get_all(t), xi, yi, color)
+            draw_iarrays(ax, self.get_all(t), xi, yi, color, **kwargs)
 
     def __call__(self,t) :
         t = np.asarray(t)
@@ -117,12 +117,15 @@ class UniformPartitioner (Partitioner) :
         
         for tt in parent.t_spec.tu(t0, tf) :
             self.integrate_partition(parent, tt)
+
         return parent
 
     def integrate_partition (self, partition:Partition, tt) :
         x0 = partition(tt[0])
         if partition.primer :
+            # before = time.time()
             self.clsys.control.prime(x0)
+            # after = time.time(); self.timer += after - before
         if partition.subpartitions is None :
             self.clsys.control.step(tt[0], x0)
             self.clsys.prime(x0)

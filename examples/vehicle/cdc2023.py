@@ -116,8 +116,8 @@ for i, exps in enumerate(experiments) :
 
         # axs1[i,j].text(-0.5,8.5,f'runtime:\n${runtime:.3f}$',fontsize=15,verticalalignment='top')
 
-        # axs1[i,j].text(-0.5,8.5,f'runtime: ${avg_runtime:.3f}\pm{std_runtime:.3f}$\nvolume: {vol:.5f}',fontsize=15,verticalalignment='top')
-        axs1[i,j].text(-0.5,8.5,f'runtime: $1.583 \pm 0.010$\nvolume: {vol:.5f}',fontsize=15,verticalalignment='top')
+        axs1[i,j].text(-0.5,8.5,f'runtime: ${avg_runtime:.3f}\pm{std_runtime:.3f}$\nvolume: {vol:.5f}',fontsize=15,verticalalignment='top')
+        # axs1[i,j].text(-0.5,8.5,f'runtime: $1.583 \pm 0.010$\nvolume: {vol:.5f}',fontsize=15,verticalalignment='top')
 
         delim = r'\,'
         table.append([rf'$[{delim.join(str(e) for e in eps)}]$'.replace('inf',r'\infty'),

@@ -171,13 +171,33 @@ def d_positive (B, separate=True) :
 sg_box = lambda x, xi=0, yi=1 : sg.box(x[xi].l,x[yi].l,x[xi].u,x[yi].u)
 sg_boxes = lambda xx, xi=0, yi=0 : [sg_box(x, xi, yi) for x in xx]
 
-def draw_sg_union (ax, boxes, color='tab:blue') :
+def draw_sg_union (ax, boxes, color='tab:blue', **kwargs) :
     shape = so.unary_union(boxes)
     xs, ys = shape.exterior.xy
-    ax.fill(xs, ys, alpha=1, fc='none', ec=color)
+    kwargs.setdefault('lw', 2)
+    ax.fill(xs, ys, alpha=1, fc='none', ec=color, **kwargs)
 
-draw_iarray = lambda ax, x, xi=0, yi=1, color='tab:blue' : draw_sg_union(ax, [sg_box(x, xi, yi)], color)
-draw_iarrays = lambda ax, xx, xi=0, yi=1, color='tab:blue' : draw_sg_union(ax, sg_boxes(xx, xi, yi), color)
+draw_iarray = lambda ax, x, xi=0, yi=1, color='tab:blue', **kwargs : draw_sg_union(ax, [sg_box(x, xi, yi)], color, **kwargs)
+draw_iarrays = lambda ax, xx, xi=0, yi=1, color='tab:blue', **kwargs: draw_sg_union(ax, sg_boxes(xx, xi, yi), color, **kwargs)
+
+
+def draw_iarray_3d (ax, x, xi=0, yi=1, zi=2, color='tab:blue') :
+    Xl, Yl, Zl, Xu, Yu, Zu = \
+        x[xi].l, x[yi].l, x[zi].l,\
+        x[xi].u, x[yi].u, x[zi].u
+    faces = [ \
+        np.array([[Xl,Yl,Zl],[Xu,Yl,Zl],[Xu,Yu,Zl],[Xl,Yu,Zl],[Xl,Yl,Zl]]), \
+        np.array([[Xl,Yl,Zu],[Xu,Yl,Zu],[Xu,Yu,Zu],[Xl,Yu,Zu],[Xl,Yl,Zu]]), \
+        np.array([[Xl,Yl,Zl],[Xu,Yl,Zl],[Xu,Yl,Zu],[Xl,Yl,Zu],[Xl,Yl,Zl]]), \
+        np.array([[Xl,Yu,Zl],[Xu,Yu,Zl],[Xu,Yu,Zu],[Xl,Yu,Zu],[Xl,Yu,Zl]]), \
+        np.array([[Xl,Yl,Zl],[Xl,Yu,Zl],[Xl,Yu,Zu],[Xl,Yl,Zu],[Xl,Yl,Zl]]), \
+        np.array([[Xu,Yl,Zl],[Xu,Yu,Zl],[Xu,Yu,Zu],[Xu,Yl,Zu],[Xu,Yl,Zl]]) ]
+    for face in faces :
+        ax.plot3D(face[:,0], face[:,1], face[:,2], color='tab:blue', alpha=0.75, lw=0.75)
+
+def draw_iarrays_3d (ax, xx, xi=0, yi=1, zi=2, color='tab:blue') :
+    for x in xx :
+        draw_iarray_3d(ax, x, xi, yi, zi, color)
 
 # def draw_iarray (ax, x, xi=0, yi=1, color='tab:blue') :
 #     draw_sg_union(sg_box(x, xi, yi))

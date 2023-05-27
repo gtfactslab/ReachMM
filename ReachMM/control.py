@@ -32,10 +32,13 @@ class Control :
                     self.iuCALC_x = np.empty((d, self.u_len), dtype=np.interval)
                     self.iuCALCx_ = np.empty((d, self.u_len), dtype=np.interval)
                 for i in range(d) :
-                    xi = np.copy(x); xi[i].vec[1] = x[i].vec[0]
+                    xi = np.copy(x); 
+
+                    tmpi = x[i]; tmpi.u = x[i].l; xi[i] = tmpi
                     self.prime(xi) if self.mode == 'local' else None
                     self.iuCALC_x [i,:] = self.u (t, xi)
-                    xi[i].vec[1] = x[i].vec[1]; xi[i].vec[0] = x[i].vec[1]
+
+                    tmpi = x[i]; tmpi.l = x[i].u; xi[i] = tmpi
                     self.prime(xi) if self.mode == 'local' else None
                     self.iuCALCx_ [i,:] = self.u (t, xi)
                 return self.iuCALC_x, self.iuCALCx_
@@ -78,6 +81,13 @@ class LinearControl (Control) :
 #         else :
 #             return self.C @ x + self.d
 
+class NoControl (Control) :
+    def __init__(self, u_len=1):
+        super().__init__(u_len, 'global')
+        self.uZERO = np.zeros(self.u_len)
+
+    def u (self, t, x) :
+        return self.uZERO.astype(x.dtype)
 
 class Disturbance :
     def __init__(self, w_len) :

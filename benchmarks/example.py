@@ -10,7 +10,7 @@ x1, x2, u, w = sp.symbols('x1 x2 u w')
 f_eqn = [ x2, u*x2**2 - x1 ]
 
 t_spec = ContinuousTimeSpec(0.01, 0.2)
-sys = NLSystem([x1, x2], [u], [w], f_eqn, t_spec)
+sys = System([x1, x2], [u], [w], f_eqn, t_spec)
 net = NeuralNetwork('models/nn_1_relu')
 clsys = NNCSystem(sys, net, 'interconnect')
 

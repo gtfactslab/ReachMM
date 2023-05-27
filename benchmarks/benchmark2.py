@@ -14,7 +14,7 @@ f_eqn = [
 t_spec = ContinuousTimeSpec(0.1, 0.2)
 # t_spec = DiscretizedTimeSpec(0.1)
 # t_spec = DiscreteTimeSpec()
-sys = NLSystem([x1, x2], [u], [w], f_eqn, t_spec)
+sys = System([x1, x2], [u], [w], f_eqn, t_spec)
 net = NeuralNetwork('models/nn_2_relu')
 clsys = NNCSystem(sys, net, 'interconnect')
 print(clsys)

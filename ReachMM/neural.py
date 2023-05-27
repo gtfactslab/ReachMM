@@ -10,7 +10,7 @@ from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
 from collections import defaultdict
 import os
 # from ReachMM.decomp import d_metzler, d_positive
-
+import time
 
 class NeuralNetwork (nn.Module) :
     def __init__(self, dir=None, load=True, device='cpu') :
@@ -42,7 +42,7 @@ class NeuralNetwork (nn.Module) :
         if load :
             loadpath = os.path.join(dir, 'model.pt')
             self.load_state_dict(torch.load(loadpath, map_location=device))
-            print(f'Successfully loaded model from {loadpath}')
+            # print(f'Successfully loaded model from {loadpath}')
 
         self.device = device
         # self.dummy_input = torch.tensor([[0,0,0,0,0]], dtype=torch.float64).to(device)
@@ -53,6 +53,9 @@ class NeuralNetwork (nn.Module) :
     
     def __getitem__(self,idx) :
         return self.seq[idx]
+    
+    def __str__ (self) :
+        return f'neural network from {self.dir}, {str(self.seq)}'
     
     def save(self) :
         savepath = os.path.join(self.dir, 'model.pt')
@@ -110,8 +113,12 @@ class NeuralNetworkControl (Control) :
             _x, x_ = get_lu(x)
             _u = self._Cp @ _x + self._Cn @ x_ + self._d
             u_ = self.C_p @ x_ + self.C_n @ _x + self.d_
-            u = get_iarray(_u, u_)
-            return np.intersection(u, self.uclip)
+            # u = get_iarray(_u, u_)
+            # ret_u = np.max(_u, self._uclip)
+            ret_u = np.clip(_u, self._uclip, self.u_clip)
+            retu_ = np.clip(u_, self._uclip, self.u_clip)
+            return get_iarray(ret_u, retu_)
+            # return np.intersection(u, self.uclip)
         else :
             xin = torch.tensor(x.astype(np.float32),device=self.device)
             u = self.nn(xin).cpu().detach().numpy().reshape(-1)
@@ -146,4 +153,4 @@ class NeuralNetworkControl (Control) :
         # print('d_', self.d_)
     
     def __str__(self) -> str:
-        return f'neural network controller with {self.nn.seq.__str__()}, {self.mode} mode'
+        return f'{str(self.nn)}, {self.mode} mode'
