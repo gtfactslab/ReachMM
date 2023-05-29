@@ -10,6 +10,7 @@ import shapely.geometry as sg
 import shapely.ops as so
 from tqdm import tqdm
 import time
+
 class Partition :
     _id = 0
 
@@ -72,6 +73,18 @@ class Partition :
         tt = np.atleast_1d(tt)
         for t in tt :
             draw_iarrays(ax, self.get_all(t), xi, yi, color, **kwargs)
+
+    def check_safety (self, spec, tt) :
+        ret = 'Y'
+        for t in tt :
+            # xx = self(tt)
+            # print(spec(self(t)))
+            s = spec(self(t))
+            if s.l < 0 and s.u > 0 :
+                ret = 'U'
+            elif s.l < 0 and s.u < 0 :
+                return 'N'
+        return ret
 
     def __call__(self,t) :
         t = np.asarray(t)

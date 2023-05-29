@@ -74,9 +74,15 @@ class System :
 
         tuple = (x_vars, u_vars, w_vars)
 
-        self.f    = sp.lambdify(tuple, self.f_eqn, 'numpy', cse=my_cse)
-        self.f_i  = [sp.lambdify(tuple, f_eqn_i, 'numpy', cse=my_cse) for f_eqn_i in self.f_eqn]
+        self.f     = sp.lambdify(tuple, self.f_eqn, 'numpy', cse=my_cse)
+        self.f_i   = [sp.lambdify(tuple, f_eqn_i, 'numpy', cse=my_cse) for f_eqn_i in self.f_eqn]
         self.f_len = len(self.f_i)
+
+        # self.g_none = g_eqn is None
+        # self.g_eqn = g_eqn if not self.g_none else self.x_vars
+        # self.g     = sp.lambdify(tuple, self.g_none, 'numpy', cse=my_cse)
+        # self.g_i   = [sp.lambdify(tuple, g_eqn_i, 'numpy', cse=my_cse) for g_eqn_i in self.g_eqn]
+        # self.g_len = len(self.g_i)
 
         self.Df_x_sym = self.f_eqn.jacobian(x_vars)
         self.Df_u_sym = self.f_eqn.jacobian(u_vars)
@@ -125,7 +131,7 @@ class ControlledSystem :
     
     # Returns x_{t+1} given x_t.
     def func (self, t, x) :
-        self.control.step(t, x)
+        self.control.step(t, self.sys.g(x))
 
         # Monotone Inclusion
         if x.dtype == np.interval :
@@ -197,9 +203,9 @@ class AutonomousSystem (ControlledSystem) :
             \r{self.sys.__str__()}'''
 class NNCSystem (ControlledSystem) :
     def __init__(self, sys:System, nn:NeuralNetwork, incl_method='jacobian', interc_mode=None,
-                 dist:Disturbance=NoDisturbance(1), uclip=np.interval(-np.inf,np.inf)) -> None:
+                 dist:Disturbance=NoDisturbance(1), uclip=np.interval(-np.inf,np.inf), g_tuple=None, g_eqn=None) -> None:
         self.nn = nn
-        ControlledSystem.__init__(self, sys, NeuralNetworkControl(nn, interc_mode, uclip=uclip),
+        ControlledSystem.__init__(self, sys, NeuralNetworkControl(nn, interc_mode, uclip=uclip, g_tuple=g_tuple, g_eqn=g_eqn),
                                   interc_mode, dist)
         self.incl_method = incl_method
         self.e = None

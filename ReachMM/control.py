@@ -1,10 +1,11 @@
 import numpy as np
 import interval
+import sympy as sp
 from interval import get_lu, get_iarray
 from ReachMM.utils import d_positive
 
 class Control :
-    def __init__(self, u_len, mode='hybrid') :
+    def __init__(self, u_len, mode='hybrid', g_tuple=None, g_eqn=None) :
         self.u_len = u_len
         # global, hybrid, or local
         self.mode = mode
@@ -13,6 +14,17 @@ class Control :
         self.iuCALC = None
         self.iuCALC_x = None
         self.iuCALCx_ = None
+        # output feedback
+        if g_eqn is not None :
+            # def my_cse(exprs, symbols=None, optimizations=None, postprocess=None,
+            #     order='canonical', ignore=(), list=True) :
+            #     return sp.cse(exprs=exprs, symbols=sp.numbered_symbols('_dum'), optimizations='basic', 
+            #                 postprocess=postprocess, order=order, ignore=ignore, list=list)
+            self.g_eqn = g_eqn
+            self.g_lam = sp.lambdify(g_tuple, self.g_eqn, 'numpy')
+            self.g = lambda x : np.asarray(self.g_lam(x)).reshape(-1)
+        else :
+            self.g = lambda x : x
 
     def u (self, t, x) :
         pass
@@ -21,9 +33,10 @@ class Control :
         pass
 
     def step (self, t, x) :
+        # x = self.g(x)
         # Inclusion Function
         if x.dtype == np.interval :
-            self.iuCALC = self.u (t, x)
+            self.iuCALC = self.u (t,x)
             if self.mode == 'global' :
                 return self.iuCALC
             elif self.mode == 'hybrid' or self.mode == 'local' :
@@ -45,11 +58,13 @@ class Control :
 
         # Regular PW Control
         else :
+            # x = self.g(x)
             self.uCALC = self.u (t, x)
             return self.uCALC
 
 
     def __call__(self, t, x) : 
+        x = self.g(x)
         return self.step(t,x)
 
 class LinearControl (Control) :
@@ -107,6 +122,7 @@ class NoDisturbance (Disturbance) :
 class ConstantDisturbance (Disturbance) :
     def __init__(self, wCONST, iwCONST):
         wCONST = np.asarray(wCONST)
+        iwCONST = np.asarray(iwCONST)
         super().__init__(len(wCONST))
         self.wCONST  = wCONST
         self.iwCONST = iwCONST

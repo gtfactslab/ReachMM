@@ -1,7 +1,6 @@
 import os
 import torch
 import torch.nn as nn
-from ModuleFromTxt import ModuleFromTxt
 from ReachMM.neural import NeuralNetwork
 from pathlib import Path
 from numpy import identity

@@ -82,8 +82,8 @@ class ScaledMSELoss (nn.MSELoss) :
         return super().__call__(output/self.scale, target/self.scale)
 
 class NeuralNetworkControl (Control) :
-    def __init__(self, nn, mode='hybrid', method='CROWN', bound_opts=None, device='cpu', x_len=None, u_len=None, uclip=np.interval(-np.inf,np.inf), verbose=False, custom_ops=None, model=None, **kwargs):
-        super().__init__(u_len=nn.out_len if u_len is None else u_len,mode=mode)
+    def __init__(self, nn, mode='hybrid', method='CROWN', bound_opts=None, device='cpu', x_len=None, u_len=None, uclip=np.interval(-np.inf,np.inf), g_eqn=None, g_tuple=None, verbose=False, custom_ops=None, **kwargs):
+        super().__init__(u_len=nn.out_len if u_len is None else u_len, mode=mode, g_tuple=g_tuple, g_eqn=g_eqn)
         self.x_len = nn[0].in_features if x_len is None else x_len
         self.global_input = torch.zeros([1,self.x_len], dtype=torch.float32)
         self.nn = nn
@@ -107,6 +107,7 @@ class NeuralNetworkControl (Control) :
         self._uclip, self.u_clip = get_lu(uclip)
         
     def u (self, t, x) :
+        x = self.g(x)
         if x.dtype == np.interval :
             # Assumes .prime was called beforehand.
             # u = (self.C @ x + self.d).reshape(-1)
@@ -126,6 +127,7 @@ class NeuralNetworkControl (Control) :
     
     # Primes the control if to work for a range of x_xh (finds _C, C_, _d, d_)
     def prime (self, x) :
+        x = self.g(x)
         if x.dtype != np.interval :
             return
             # raise Exception('Call prime with an interval array')
