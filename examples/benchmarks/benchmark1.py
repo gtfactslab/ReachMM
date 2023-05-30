@@ -14,16 +14,18 @@ def _benchmark1 (N) :
         x2,
         u*x2**2 - x1
     ]
-    t_spec = ContinuousTimeSpec(0.05,0.2)
+    t_spec = ContinuousTimeSpec(0.02,0.2)
+    # t_spec = DiscretizedTimeSpec(0.2)
     sys = System([x1, x2], [u], [w], f_eqn, t_spec)
     net = NeuralNetwork('models/nn_1_relu')
-    clsys = NNCSystem(sys, net, 'interconnect')
+    # clsys = NNCSystem(sys, net, 'interconnect')
+    clsys = NNCSystem(sys, net, 'jacobian')
     # t_end = 7
-    t_end = 5
+    t_end = 4
     x0 = np.array([ np.interval(0.8,0.9), np.interval(0.5,0.6) ])
-    # opts = CGPartitioner.Opts(0.5, 0.1, 2, 0, -1,-1,-1, True)
+    # opts = CGPartitioner.Opts(0.05, 0.1, 5, 0, -1,-1,-1, True)
     # partitioner = CGPartitioner(clsys)
-    opts = UniformPartitioner.Opts(3, 0)
+    opts = UniformPartitioner.Opts(1, 0)
     partitioner = UniformPartitioner(clsys)
     rs, times = run_times(N, partitioner.compute_reachable_set, 0,t_end,x0,opts)
 

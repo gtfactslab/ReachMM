@@ -1,0 +1,1 @@
+4 20 sigmoid 20 sigmoid 20 sigmoid 1 sigmoid 1

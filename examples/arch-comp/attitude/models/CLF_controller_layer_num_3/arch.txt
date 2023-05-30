@@ -1,0 +1,1 @@
+6 64 sigmoid 64 sigmoid 64 sigmoid 3 Affine 3

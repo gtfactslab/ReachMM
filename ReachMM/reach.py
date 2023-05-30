@@ -74,6 +74,10 @@ class Partition :
         for t in tt :
             draw_iarrays(ax, self.get_all(t), xi, yi, color, **kwargs)
 
+    # def plot_rs_t (self, ax, tt, xi=0, color='tab:blue', **kwargs) :
+    #     tivals = np.array([np.interval(tt[i],tt[i+1]) for i in range(len(tt)-1)])
+    #     iarrays = np.concatenate((tivals,self(tt)[:,xi]))
+
     def check_safety (self, spec, tt) :
         ret = 'Y'
         for t in tt :
@@ -101,7 +105,7 @@ class Partition :
             xx2_l = np.min(xx2_parts[:,:,:,0], axis=0)
             xx2_u = np.max(xx2_parts[:,:,:,1], axis=0)
             xx2 = get_iarray(xx2_l, xx2_u)
-            return np.vstack((xx1, xx2))
+            return np.vstack((xx1, xx2)).reshape(t.shape + (-1,))
         elif np.any(tmask) :
             return xx1.reshape(t.shape + (-1,))
         return np.array([])
@@ -136,14 +140,13 @@ class UniformPartitioner (Partitioner) :
     def integrate_partition (self, partition:Partition, tt) :
         x0 = partition(tt[0])
         if partition.primer :
-            # before = time.time()
             self.clsys.control.prime(x0)
-            # after = time.time(); self.timer += after - before
         if partition.subpartitions is None :
             self.clsys.control.step(tt[0], x0)
             self.clsys.prime(x0)
             for t in tt :
-                partition.set(t + self.clsys.sys.t_spec.t_step, self.clsys.func(t, partition(t)))
+                tmp = self.clsys.func(t, partition(t))
+                partition.set(t + self.clsys.sys.t_spec.t_step, tmp)
         else :
             for subpartition in partition.subpartitions :
                 self.integrate_partition(subpartition, tt)

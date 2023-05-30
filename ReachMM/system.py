@@ -339,10 +339,16 @@ class NNCSystem (ControlledSystem) :
 
         # Bounding the difference: error dynamics
         self.control.step(0, x)
-        self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
+        # self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
+        d_e, de_ = self.f_replace(x, self.control.iuCALC_x, self.control.iuCALCx_)
+        _etp1 = _e + self.sys.t_spec.t_step * d_e
+        e_tp1 = e_ + self.sys.t_spec.t_step * de_
+        self.e = get_iarray(_etp1, e_tp1)
 
-        _xtp1 = _x + self.sys.t_spec.t_step * np.max(np.array([d_x1,d_x2,d_x3,d_x4]), axis=0)
-        x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([dx_1,dx_2,dx_3,dx_4]), axis=0)
+        _xtp1 = _x + self.sys.t_spec.t_step * np.max(np.array([d_x1,d_x2,d_x3,d_x4,d_x5]), axis=0)
+        x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([dx_1,dx_2,dx_3,dx_4,dx_5]), axis=0)
+        # _xtp1 = _x + self.sys.t_spec.t_step * np.max(np.array([d_x1,d_x4]), axis=0)
+        # x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([dx_1,dx_4]), axis=0)
         return get_iarray(_xtp1, x_tp1)
     
     def _nl_jac_disc (self, t, x) :
