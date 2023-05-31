@@ -79,10 +79,10 @@ class Partition :
         else :
             raise Exception(f'Partition not defined at {t} \\notin [{self.t0}, {self.tf}]')
 
-    def draw_rs (self, ax, tt, xi=0, yi=1, color='tab:blue', **kwargs) :
+    def draw_rs (self, ax, tt, xi=0, yi=1, **kwargs) :
         tt = np.atleast_1d(tt)
         for t in tt :
-            draw_iarrays(ax, self.get_all(t), xi, yi, color, **kwargs)
+            draw_iarrays(ax, self.get_all(t), xi, yi, **kwargs)
 
     # def plot_rs_t (self, ax, tt, xi=0, color='tab:blue', **kwargs) :
     #     tivals = np.array([np.interval(tt[i],tt[i+1]) for i in range(len(tt)-1)])

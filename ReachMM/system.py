@@ -49,6 +49,9 @@ class Trajectory :
         xx = self(tt)
         ax.scatter(xx[:,xi], xx[:,yi], xx[:,zi], **kwargs)
 
+    # def to_rs (self) :
+    #     partition = 
+
     def __call__(self, t) :
         not_def = np.logical_or(self._n(t) > self._n(self.tf), self._n(t) < self._n(self.t0))
         if np.any(not_def) :
@@ -89,11 +92,12 @@ class System :
         self.Df_u_sym = self.f_eqn.jacobian(u_vars)
         self.Df_w_sym = self.f_eqn.jacobian(w_vars)
 
-        # if (not self.Df_x_sym.free_symbols) and (not self.Df_u_sym.free_symbols) :
+        # if (not self.Df_x_sym.free_symbols) and (not self.Df_u_sym.free_symbols) and (not self.Df_w_sym.free_symbols):
         if False:
             self.A = sp.lambdify((), self.Df_x_sym, 'numpy', cse=my_cse)()[0]
             self.B = sp.lambdify((), self.Df_u_sym, 'numpy', cse=my_cse)()[0]
             self.Bp, self.Bn = d_positive(self.B)
+            self.D = sp.lambdify((), self.Df_w_sym, 'numpy', cse=my_cse)()[0]
             self.const = self.f(np.zeros(len(x_vars)), np.zeros(len(u_vars)), np.zeros(len(w_vars)))[0].reshape(-1)
             self.type = 'linear'
         else :
@@ -107,13 +111,12 @@ class System :
         return f'''{self.type.title()} {str(self.t_spec)} System with 
             \r  {'xdot' if self.t_spec.type == 'continuous' or self.t_spec.type == 'discretized' else 'x+'} = f(x,u,w) = {str(self.f_eqn)}'''
 
-    def get_AB (self, x, u, w) :
+    def get_ABD (self, x, u, w) :
         if self.type == 'linear' :
-            return self.A, self.B
+            return self.A, self.B, self.D
         else :
-            return self.Df_x(x, u, w)[0].astype(x.dtype), self.Df_u(x, u, w)[0].astype(x.dtype)
-        
-
+            return self.Df_x(x, u, w)[0].astype(x.dtype), self.Df_u(x, u, w)[0].astype(x.dtype), self.Df_w(x, u, w)[0].astype(x.dtype)
+    
 class ControlledSystem :
     def __init__(self, sys:System, control:Control, interc_mode=None,
                  dist:Disturbance=NoDisturbance(1), xclip=np.interval(-np.inf,np.inf)) :
@@ -265,13 +268,18 @@ class NNCSystem (ControlledSystem) :
             \rusing the {self.incl_method} monotone inclusion function'''
 
     def _nl_jac_cont (self, t, x) :
+        w = self.dist.w(t, x)
         _x, x_ = get_lu(x)
         _u, u_ = get_lu(self.uj)
-        A, B = self.sys.get_AB(x, self.uj, self.dist.w(t,x))
+        _w, w_ = get_lu(w)
+        A, B, D = self.sys.get_ABD(x, self.uj, w)
         _A, A_ = get_lu(A)
         _B, B_ = get_lu(B)
+        _D, D_ = get_lu(D)
         _Bp, _Bn = d_positive(_B)
         B_p, B_n = d_positive(B_)
+        _Dp, _Dn = d_positive(_D)
+        D_p, D_n = d_positive(D_)
 
         _e, e_ = get_lu(self.e)
 
@@ -288,9 +296,9 @@ class NNCSystem (ControlledSystem) :
         L_ = A_ + K_
         _Lp, _Ln = d_metzler(_L)
         L_p, L_n = d_metzler(L_)
-        f = self.sys.f(_x,_u,self.dist.w(t,_x))[0].reshape(-1)
-        d_x1 = _Lp@_x + _Ln@x_ + _c - _A@_x - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f
-        dx_1 = L_p@x_ + L_n@_x + c_ - A_@_x - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f
+        f = self.sys.f(_x,_u,_w)[0].reshape(-1)
+        d_x1 = _Lp@_x + _Ln@x_ + _c - _A@_x - _B@_u - _D@_w + _Bp@self.control._d + _Bn@self.control.d_ + _Dp@_w + _Dn@w_ + f
+        dx_1 = L_p@x_ + L_n@_x + c_ - A_@_x - B_@_u - D_@_w + B_p@self.control.d_ + B_n@self.control._d + D_n@_w + D_p@w_ + f
 
         # Centered around _x, u_
         _K = B_p@self.control._C + B_n@self.control.C_
@@ -299,13 +307,15 @@ class NNCSystem (ControlledSystem) :
         K_p, K_n = d_positive(K_)
         _c = - _Kn@_e - _Kp@e_ 
         c_ = - K_n@e_ - K_p@_e
+        # _c = 0
+        # c_ = 0
         _L = _A + _K
         L_ = A_ + K_
         _Lp, _Ln = d_metzler(_L)
         L_p, L_n = d_metzler(L_)
-        f = self.sys.f(_x,u_,self.dist.w(t,_x))[0].reshape(-1)
-        d_x2 = _Lp@_x + _Ln@x_ + _c - _A@_x - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f
-        dx_2 = L_p@x_ + L_n@_x + c_ - A_@_x - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f
+        f = self.sys.f(_x,u_,_w)[0].reshape(-1)
+        d_x2 = _Lp@_x + _Ln@x_ + _c - _A@_x - B_@u_ - _D@_w + B_p@self.control._d + B_n@self.control.d_ + _Dp@_w + _Dn@w_ + f
+        dx_2 = L_p@x_ + L_n@_x + c_ - A_@_x - _B@u_ - D_@_w + _Bp@self.control.d_ + _Bn@self.control._d + D_n@_w + D_p@w_ + f
 
         # Centered around x_, _u
         _K = _Bp@self.control._C + _Bn@self.control.C_
@@ -314,13 +324,15 @@ class NNCSystem (ControlledSystem) :
         K_p, K_n = d_positive(K_)
         _c = - _Kn@_e - _Kp@e_ 
         c_ = - K_n@e_ - K_p@_e
+        # _c = 0
+        # c_ = 0
         _L = A_ + _K
         L_ = _A + K_
         _Lp, _Ln = d_metzler(_L)
         L_p, L_n = d_metzler(L_)
-        f = self.sys.f(x_,_u,self.dist.w(t,x_))[0].reshape(-1)
-        d_x3 = _Lp@_x + _Ln@x_ + _c - A_@x_ - _B@_u + _Bp@self.control._d + _Bn@self.control.d_ + f
-        dx_3 = L_p@x_ + L_n@_x + c_ - _A@x_ - B_@_u + B_p@self.control.d_ + B_n@self.control._d + f
+        f = self.sys.f(x_,_u,w_)[0].reshape(-1)
+        d_x3 = _Lp@_x + _Ln@x_ + _c - A_@x_ - _B@_u - D_@w_ + _Bp@self.control._d + _Bn@self.control.d_ + _Dp@_w + _Dn@w_ + f
+        dx_3 = L_p@x_ + L_n@_x + c_ - _A@x_ - B_@_u - _D@w_ + B_p@self.control.d_ + B_n@self.control._d + D_n@_w + D_p@w_ + f
 
         # Centered around x_, u_
         _K = B_p@self.control._C + B_n@self.control.C_
@@ -329,24 +341,27 @@ class NNCSystem (ControlledSystem) :
         K_p, K_n = d_positive(K_)
         _c = - _Kn@_e - _Kp@e_ 
         c_ = - K_n@e_ - K_p@_e
+        # _c = 0
+        # c_ = 0
         _L = A_ + _K
         L_ = _A + K_
         _Lp, _Ln = d_metzler(_L)
         L_p, L_n = d_metzler(L_)
-        f = self.sys.f(x_,u_,self.dist.w(t,x_))[0].reshape(-1)
-        d_x4 = _Lp@_x + _Ln@x_ + _c - A_@x_ - B_@u_ + B_p@self.control._d + B_n@self.control.d_ + f
-        dx_4 = L_p@x_ + L_n@_x + c_ - _A@x_ - _B@u_ + _Bp@self.control.d_ + _Bn@self.control._d + f
-
-        # Interconnection mode
-        d_x5, dx_5 = self.f_replace(x, self.ujCALC_x, self.ujCALCx_)
+        f = self.sys.f(x_,u_,w_)[0].reshape(-1)
+        d_x4 = _Lp@_x + _Ln@x_ + _c - A_@x_ - B_@u_ - D_@w_ + B_p@self.control._d + B_n@self.control.d_ + _Dp@_w + _Dn@w_ + f
+        dx_4 = L_p@x_ + L_n@_x + c_ - _A@x_ - _B@u_ - _D@w_ + _Bp@self.control.d_ + _Bn@self.control._d + D_n@_w + D_p@w_ + f
 
         # Bounding the difference: error dynamics
         self.control.step(0, x)
-        # self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
-        d_e, de_ = self.f_replace(x, self.control.iuCALC_x, self.control.iuCALCx_)
-        _etp1 = _e + self.sys.t_spec.t_step * d_e
-        e_tp1 = e_ + self.sys.t_spec.t_step * de_
-        self.e = get_iarray(_etp1, e_tp1)
+        self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.control.iuCALC, w)[0].reshape(-1)
+        # d_e, de_ = self.f_replace(x, self.control.iuCALC_x, self.control.iuCALCx_)
+        # _etp1 = _e + self.sys.t_spec.t_step * d_e
+        # e_tp1 = e_ + self.sys.t_spec.t_step * de_
+        # self.e = get_iarray(_etp1, e_tp1)
+
+
+        # Interconnection mode
+        d_x5, dx_5 = self.f_replace(x, self.ujCALC_x, self.ujCALCx_)
 
         _xtp1 = _x + self.sys.t_spec.t_step * np.max(np.array([d_x1,d_x2,d_x3,d_x4,d_x5]), axis=0)
         x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([dx_1,dx_2,dx_3,dx_4,dx_5]), axis=0)

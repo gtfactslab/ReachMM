@@ -1,5 +1,7 @@
 import time
 import numpy as np
+import interval
+from interval import get_lu
 from numpy import diag_indices_from, clip, inf, empty
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
@@ -7,7 +9,6 @@ from matplotlib.collections import LineCollection
 from tqdm import tqdm
 import shapely.geometry as sg
 import shapely.ops as so
-
 
 def run_time (func, *args, **kwargs) :
     before = time.time()
@@ -171,14 +172,17 @@ def d_positive (B, separate=True) :
 sg_box = lambda x, xi=0, yi=1 : sg.box(x[xi].l,x[yi].l,x[xi].u,x[yi].u)
 sg_boxes = lambda xx, xi=0, yi=0 : [sg_box(x, xi, yi) for x in xx]
 
-def draw_sg_union (ax, boxes, color='tab:blue', **kwargs) :
+def draw_sg_union (ax, boxes, **kwargs) :
     shape = so.unary_union(boxes)
     xs, ys = shape.exterior.xy
+    kwargs.setdefault('ec', 'tab:blue')
+    kwargs.setdefault('fc', 'none')
     kwargs.setdefault('lw', 2)
-    ax.fill(xs, ys, alpha=1, fc='none', ec=color, **kwargs)
+    kwargs.setdefault('alpha', 1)
+    ax.fill(xs, ys, **kwargs)
 
-draw_iarray = lambda ax, x, xi=0, yi=1, color='tab:blue', **kwargs : draw_sg_union(ax, [sg_box(x, xi, yi)], color, **kwargs)
-draw_iarrays = lambda ax, xx, xi=0, yi=1, color='tab:blue', **kwargs: draw_sg_union(ax, sg_boxes(xx, xi, yi), color, **kwargs)
+draw_iarray = lambda ax, x, xi=0, yi=1, **kwargs : draw_sg_union(ax, [sg_box(x, xi, yi)], **kwargs)
+draw_iarrays = lambda ax, xx, xi=0, yi=1, **kwargs: draw_sg_union(ax, sg_boxes(xx, xi, yi), **kwargs)
 
 
 def draw_iarray_3d (ax, x, xi=0, yi=1, zi=2, color='tab:blue') :
@@ -201,3 +205,11 @@ def draw_iarrays_3d (ax, xx, xi=0, yi=1, zi=2, color='tab:blue') :
 
 # def draw_iarray (ax, x, xi=0, yi=1, color='tab:blue') :
 #     draw_sg_union(sg_box(x, xi, yi))
+
+def plot_iarray_t (ax, tt, x, **kwargs) :
+    xl, xu = get_lu(x)
+    alpha = kwargs.pop('alpha', 0.25)
+    label = kwargs.pop('label', None)
+    ax.fill_between(tt, xl, xu, alpha=alpha, label=label, **kwargs)
+    ax.plot(tt, xl, **kwargs)
+    ax.plot(tt, xu, **kwargs)

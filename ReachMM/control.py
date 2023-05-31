@@ -146,3 +146,14 @@ class ConstantDisturbance (Disturbance) :
 
     #     return partitions
 
+class UniformDisturbance (Disturbance) :
+    def __init__(self, w_bound):
+        self.w_bound = np.asarray(w_bound)
+        super().__init__(len(self.w_bound))
+
+    def w (self, t, x) :
+        if x.dtype == np.interval :
+            return self.w_bound
+        else :
+            return np.array([np.random.uniform(wi.l, wi.u) for wi in self.w_bound])
+    
