@@ -56,11 +56,12 @@ class Trajectory :
         return self.xx[self._n(t),:]
 
 class System :
-    def __init__(self, x_vars, u_vars, w_vars, f_eqn, t_spec:TimeSpec) -> None:
-        self.t_spec = t_spec
+    def __init__(self, x_vars, u_vars, w_vars, f_eqn, t_spec:TimeSpec, x_clip=np.interval(-np.inf,np.inf)) -> None:
         self.x_vars = sp.Matrix(x_vars)
         self.u_vars = sp.Matrix(u_vars)
         self.w_vars = sp.Matrix(w_vars)
+        self.t_spec = t_spec
+        self.x_clip = x_clip
 
         if t_spec.type == 'discrete' or t_spec.type == 'continuous' :
             self.f_eqn  = sp.Matrix(f_eqn)
@@ -115,7 +116,7 @@ class System :
 
 class ControlledSystem :
     def __init__(self, sys:System, control:Control, interc_mode=None,
-                 dist:Disturbance=NoDisturbance(1)) :
+                 dist:Disturbance=NoDisturbance(1), xclip=np.interval(-np.inf,np.inf)) :
         self.sys = sys
         self.control = control
 
@@ -128,6 +129,7 @@ class ControlledSystem :
 
         self.control.mode = interc_mode
         self.dist = dist
+        self.xclip = xclip
     
     # Returns x_{t+1} given x_t.
     def func (self, t, x) :
@@ -185,12 +187,12 @@ class ControlledSystem :
             xi = np.copy(x); 
 
             tmpi = x[i]; tmpi.u = x[i].l; xi[i] = tmpi
-            _reti = self.sys.f_i[i] (xi, iuCALC_x[i,:], self.dist.w(0,xi))[0]
-            d_x[i] = _reti.l
+            _reti = np.interval(self.sys.f_i[i] (xi, iuCALC_x[i,:], self.dist.w(0,xi))[0])
+            d_x[i] = _reti.l #if _reti.dtype == np.interval else _reti
 
             tmpi = x[i]; tmpi.l = x[i].u; xi[i] = tmpi
-            ret_i = self.sys.f_i[i] (xi, iuCALCx_[i,:], self.dist.w(0,xi))[0]
-            dx_[i] = ret_i.u
+            ret_i = np.interval(self.sys.f_i[i] (xi, iuCALCx_[i,:], self.dist.w(0,xi))[0])
+            dx_[i] = ret_i.u #if ret_i.dtype == np.interval else ret_i
         return d_x, dx_
 
 class AutonomousSystem (ControlledSystem) :
@@ -231,9 +233,10 @@ class NNCSystem (ControlledSystem) :
             if self.incl_method == 'jacobian' :
                 if self.sys.t_spec.type == 'continuous' :
                     if self.sys.type == 'nonlinear' :
-                        return self._nl_jac_cont(t, x)
+                        return np.intersection(self._nl_jac_cont(t, x), self.sys.x_clip)
                     elif self.sys.type == 'linear' :
                         return self._l_jac_cont(t, x)
+                        # return self._nl_jac_cont(t, x)
                 else :
                     if self.sys.type == 'nonlinear' :
                         return self._nl_jac_disc(t, x)
@@ -245,7 +248,7 @@ class NNCSystem (ControlledSystem) :
                     d_x, dx_ = self.f_replace(x)
                     _xtp1 = _x + self.sys.t_spec.t_step * d_x
                     x_tp1 = x_ + self.sys.t_spec.t_step * dx_
-                    return get_iarray(_xtp1, x_tp1)
+                    return np.intersection(get_iarray(_xtp1, x_tp1), self.sys.x_clip)
                 else :
                     return self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
         # Deterministic system
@@ -347,6 +350,8 @@ class NNCSystem (ControlledSystem) :
 
         _xtp1 = _x + self.sys.t_spec.t_step * np.max(np.array([d_x1,d_x2,d_x3,d_x4,d_x5]), axis=0)
         x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([dx_1,dx_2,dx_3,dx_4,dx_5]), axis=0)
+        # _xtp1 = _x + self.sys.t_spec.t_step * np.max(np.array([d_x1,d_x2,d_x3,d_x4]), axis=0)
+        # x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([dx_1,dx_2,dx_3,dx_4]), axis=0)
         # _xtp1 = _x + self.sys.t_spec.t_step * np.max(np.array([d_x1,d_x4]), axis=0)
         # x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([dx_1,dx_4]), axis=0)
         return get_iarray(_xtp1, x_tp1)
