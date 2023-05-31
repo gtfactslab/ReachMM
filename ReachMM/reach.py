@@ -57,6 +57,16 @@ class Partition :
         else :
             for part in self.subpartitions :
                 part.half_partition_all (primer)
+    
+    def re_half_partition_all (self, t, x) :
+        if self.subpartitions is not None :
+            # print(f'repartitioning {t}')
+            intervals = get_half_intervals(x)
+            for part_i, part in enumerate(self.subpartitions) :
+                # print(f'{part.depth}, {len(part.xx)}, {part._n(t)}, {part_i}')
+                part.re_half_partition_all(t, intervals[part_i])
+        else :
+            self.xx[self._n(t)] = x
 
     def get_all (self, t) :
         if self._n(t) <= self._n(self.tf) :
@@ -121,6 +131,7 @@ class UniformPartitioner (Partitioner) :
     class Opts (NamedTuple) :
         depth: int = 0
         primer_depth: int = 0
+        repartition:bool = False
     
     def __init__(self, clsys:ControlledSystem) -> None:
         super().__init__(clsys)
@@ -134,6 +145,9 @@ class UniformPartitioner (Partitioner) :
         
         for tt in parent.t_spec.tu(t0, tf) :
             self.integrate_partition(parent, tt)
+            if opts.repartition :
+                t = tt[-1] + self.clsys.sys.t_spec.t_step
+                parent.re_half_partition_all(t, parent(t))
 
         return parent
 
