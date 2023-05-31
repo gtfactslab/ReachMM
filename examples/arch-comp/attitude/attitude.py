@@ -8,6 +8,7 @@ from ReachMM.reach import UniformPartitioner, CGPartitioner
 from ReachMM.control import ConstantDisturbance
 from ReachMM.utils import run_times, draw_iarray
 import matplotlib.pyplot as plt
+from inspect import getsource
 
 # States
 w1, w2, w3, p1, p2, p3 = sp.symbols('w1 w2 w3 p1 p2 p3')
@@ -22,9 +23,15 @@ f_eqn = [
     0.25*(u1+w2*w3),
     0.5*(u2-3*w1*w3),
     u3 + 2*w1*w2,
-    0.5*(w2*(p1**2 + p2**2 + p3**2 - p3) + w3*(p1**2 + p2**2 + p2 + p3**2) + w1*(p1**2 + p2**2 + p3**2 + 1)),
-    0.5*(w1*(p1**2 + p2**2 + p3**2 + p3) + w3*(p1**2 - p1 + p2**2 + p3**2) + w2*(p1**2 + p2**2 + p3**2 + 1)),
-    0.5*(w1*(p1**2 + p2**2 - p2 + p3**2) + w2*(p1**2 + p1 + p2**2 + p3**2) + w3*(p1**2 + p2**2 + p3**2 + 1))
+    0.5*((w1 + w2 + w3)*(p1**2 + p2**2 + p3**2) - w2*p3 + w3*p2 + w1),
+    0.5*((w1 + w2 + w3)*(p1**2 + p2**2 + p3**2) + w1*p3 - w3*p1 + w2),
+    0.5*((w1 + w2 + w3)*(p1**2 + p2**2 + p3**2) - w1*p2 + w2*p1 + w3),
+    # 0.5*(w2*(p1**2 + p2**2 + p3**2 - p3) + w3*(p1**2 + p2**2 + p2 + p3**2) + w1*(p1**2 + p2**2 + p3**2 + 1)),
+    # 0.5*(w1*(p1**2 + p2**2 + p3**2 + p3) + w3*(p1**2 - p1 + p2**2 + p3**2) + w2*(p1**2 + p2**2 + p3**2 + 1)),
+    # 0.5*(w1*(p1**2 + p2**2 - p2 + p3**2) + w2*(p1**2 + p1 + p2**2 + p3**2) + w3*(p1**2 + p2**2 + p3**2 + 1))
+    # 0.5*(w2*(p1**2 + p2**2 + p3*(p3 - 1)) + w3*(p1**2 + p2*(p2 + 1) + p3**2) + w1*(p1**2 + p2**2 + p3**2 + 1)),
+    # 0.5*(w1*(p1**2 + p2**2 + p3*(p3 + 1)) + w3*(p1*(p1 - 1) + p2**2 + p3**2) + w2*(p1**2 + p2**2 + p3**2 + 1)),
+    # 0.5*(w1*(p1**2 + p2*(p2 - 1) + p3**2) + w2*(p1*(p1 + 1) + p2**2 + p3**2) + w3*(p1**2 + p2**2 + p3**2 + 1))
 ]
 # spec = (Drel - (Dsafe := (Ddefault:=10) + Tgap*vego))
 # print(spec)
@@ -33,9 +40,12 @@ f_eqn = [
 t_spec = ContinuousTimeSpec(0.1,0.1)
 # t_spec = DiscretizedTimeSpec(0.1)
 sys = System(x_vars, u_vars, [w_dist], f_eqn, t_spec)
+print(sys)
 net = NeuralNetwork('models/CLF_controller_layer_num_3')
 clsys = NNCSystem(sys, net, 'jacobian')
 t_end = 3
+
+print(getsource(sys.Df_x))
 
 x0 = np.array([
     np.interval(-0.45,-0.44),
