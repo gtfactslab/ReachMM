@@ -354,6 +354,7 @@ class NNCSystem (ControlledSystem) :
         # Bounding the difference: error dynamics
         self.control.step(0, x)
         self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.control.iuCALC, w)[0].reshape(-1)
+        # self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.uj, w)[0].reshape(-1)
         # d_e, de_ = self.f_replace(x, self.control.iuCALC_x, self.control.iuCALCx_)
         # _etp1 = _e + self.sys.t_spec.t_step * d_e
         # e_tp1 = e_ + self.sys.t_spec.t_step * de_
