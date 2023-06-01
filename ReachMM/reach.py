@@ -168,10 +168,10 @@ class UniformPartitioner (Partitioner) :
 class CGPartitioner (Partitioner) :
     class Opts (NamedTuple) :
         eps:ArrayLike
-        gamma:float = 0.5
         max_depth:int = -1
         max_primer_depth:int = -1
         max_primer_partitions:int = -1
+        gamma:float = 0.1
         max_leaf_partitions:int = -1
         max_partitions:int = -1
         enable_bar:bool = False

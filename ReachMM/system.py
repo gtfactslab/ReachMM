@@ -92,8 +92,8 @@ class System :
         self.Df_u_sym = self.f_eqn.jacobian(u_vars)
         self.Df_w_sym = self.f_eqn.jacobian(w_vars)
 
-        # if (not self.Df_x_sym.free_symbols) and (not self.Df_u_sym.free_symbols) and (not self.Df_w_sym.free_symbols):
-        if False:
+        if (not self.Df_x_sym.free_symbols) and (not self.Df_u_sym.free_symbols) and (not self.Df_w_sym.free_symbols):
+        # if False:
             self.A = sp.lambdify((), self.Df_x_sym, 'numpy', cse=my_cse)()[0]
             self.B = sp.lambdify((), self.Df_u_sym, 'numpy', cse=my_cse)()[0]
             self.Bp, self.Bn = d_positive(self.B)
@@ -353,7 +353,7 @@ class NNCSystem (ControlledSystem) :
 
         # Bounding the difference: error dynamics
         self.control.step(0, x)
-        self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.control.iuCALC, w)[0].reshape(-1)
+        self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.uj, w)[0].reshape(-1)
         # d_e, de_ = self.f_replace(x, self.control.iuCALC_x, self.control.iuCALCx_)
         # _etp1 = _e + self.sys.t_spec.t_step * d_e
         # e_tp1 = e_ + self.sys.t_spec.t_step * de_
