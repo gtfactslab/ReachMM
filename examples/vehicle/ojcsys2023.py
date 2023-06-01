@@ -28,8 +28,8 @@ f_eqn = [
 x_clip = np.array([
     np.interval(-np.inf, np.inf),
     np.interval(-np.inf, np.inf),
-    # np.interval(-np.inf, np.inf),
-    np.interval(-np.pi, np.pi),
+    np.interval(-np.inf, np.inf),
+    # np.interval(-np.pi, np.pi),
     np.interval(-np.inf, np.inf),
 ])
 uclip = np.array([
@@ -41,10 +41,10 @@ t_spec = ContinuousTimeSpec(0.125,0.125)
 # t_spec = DiscretizedTimeSpec(0.125)
 sys = System([px, py, psi, v], [u1, u2], [w], f_eqn, t_spec, x_clip)
 net = NeuralNetwork('models/100r100r2')
-# clsys = NNCSystem(sys, net, 'interconnect')
-clsys = NNCSystem(sys, net, 'jacobian')
+clsys = NNCSystem(sys, net, 'interconnect')
+# clsys = NNCSystem(sys, net, 'jacobian')
 
-t_span = [0,1.25]
+t_span = [0,1.5]
 
 # cent = np.array([8,8,-2*np.pi/3,2])
 # pert = np.array([0.05,0.05,0.005,0.005])
@@ -60,7 +60,7 @@ partitioner = UniformPartitioner(clsys)
 
 # Experiment 1
 # opts = CGPartitioner.Opts(0.25, 0.1, 2, 0)
-opts = UniformPartitioner.Opts(0,0)
+opts = UniformPartitioner.Opts(1,0)
 rs, times = run_times(args.runtime_N, partitioner.compute_reachable_set, t_span[0], t_span[1], x0, opts)
 avg_runtime = np.mean(times); std_runtime = np.std(times)
 
