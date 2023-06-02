@@ -27,26 +27,35 @@ class Partition :
         self.primer = primer
 
         self.xx = [x0]
-        self._n = lambda t : np.round((t - self.t0)/self.t_spec.t_step).astype(int)
+        # self._n = lambda t : np.round((t - self.t0)/self.t_spec.t_step).astype(int)
         self.subpartitions = None
 
         # print(f'new partition {depth}, {primer_depth}, {primer}')
 
         self._id = Partition._id
         Partition._id += 1
-    
+
+    def _n (self, t) :
+        t = np.asarray(t)
+        if t.ndim == 0 :
+            return round((t - self.t0)/self.t_spec.t_step)
+        return np.round((t - self.t0)/self.t_spec.t_step).astype(int)
+
     def set (self, t, x) :
-        if len(self.xx) == self._n(t) :
-            self.xx.append(x)
-            self.tf = t
-        else :
-            raise Exception(f'_n(t): {self._n(t)} is not n+1: {len(self.xx)}')
+        self.xx.append(x)
+        self.tf = t
+        # if len(self.xx) == self._n(t) :
+        #     self.xx.append(x)
+        #     self.tf = t
+        # else :
+        #     raise Exception(f'_n(t): {self._n(t)} is not n+1: {len(self.xx)}')
 
     def revert (self, t) :
-        if t > self.tf :
-            raise Exception(f'cannot revert to a future time t={t} > tf={self.tf}')
+        # if t > self.tf :
+        #     raise Exception(f'cannot revert to a future time t={t} > tf={self.tf}')
+        # self.xx = self.xx[:self._n(t)+1]
+        del(self.xx[self._n(t)+1:])
         self.tf = t
-        self.xx = self.xx[:self._n(t)+1]
 
     def half_partition_all (self, primer:bool) :
         if self.subpartitions is None :
@@ -84,6 +93,12 @@ class Partition :
         for t in tt :
             draw_iarrays(ax, self.get_all(t), xi, yi, **kwargs)
 
+    def area (self, t, xi=0, yi=1) :
+        return so.unary_union(sg_boxes(self.get_all(t), xi, yi)).area
+        # boxes = self.sg_boxes(t, xi, yi)
+        # shape = so.unary_union(boxes)
+        # return shape.area
+
     # def plot_rs_t (self, ax, tt, xi=0, color='tab:blue', **kwargs) :
     #     tivals = np.array([np.interval(tt[i],tt[i+1]) for i in range(len(tt)-1)])
     #     iarrays = np.concatenate((tivals,self(tt)[:,xi]))
@@ -100,8 +115,24 @@ class Partition :
                 return 'N'
         return ret
 
+    def _call_single(self, t) :
+        n = self._n(t)
+        if n <= self._n(self.tf) :
+            return self.xx[n]
+        elif self.subpartitions is not None :
+            # Shape is (subpartitions, xlen, 2 (lu))
+            xx2_parts = as_lu(np.asarray([(subpart(t)) for subpart in self.subpartitions]))
+            # Shape is (time, xlen)
+            xx2_l = np.min(xx2_parts[:,:,0], axis=0)
+            xx2_u = np.max(xx2_parts[:,:,1], axis=0)
+            xx2 = get_iarray(xx2_l, xx2_u)
+            return xx2
+
     def __call__(self,t) :
         t = np.asarray(t)
+        if t.ndim == 0 :
+            return self._call_single(t)
+
         tmask = self._n(t) <= self._n(self.tf)
         t1 = t[tmask]
         t2 = t[np.logical_not(tmask)]
@@ -159,8 +190,7 @@ class UniformPartitioner (Partitioner) :
             self.clsys.control.step(tt[0], x0)
             self.clsys.prime(x0)
             for t in tt :
-                tmp = self.clsys.func(t, partition(t))
-                partition.set(t + self.clsys.sys.t_spec.t_step, tmp)
+                partition.set(t + self.clsys.sys.t_spec.t_step, self.clsys.func(t, partition(t)))
         else :
             for subpartition in partition.subpartitions :
                 self.integrate_partition(subpartition, tt)
@@ -170,8 +200,8 @@ class CGPartitioner (Partitioner) :
         eps:ArrayLike
         max_depth:int = -1
         max_primer_depth:int = -1
+        gamma:float = 1
         max_primer_partitions:int = -1
-        gamma:float = 0.1
         max_leaf_partitions:int = -1
         max_partitions:int = -1
         enable_bar:bool = False
@@ -200,15 +230,15 @@ class CGPartitioner (Partitioner) :
             self.clsys.control.step(tt[0], x0)
             self.clsys.prime(x0)
             for t in tt :
-                partition.set(t + self.clsys.sys.t_spec.t_step, self.clsys.func(t, partition(t)))
+                tp1 = t + self.clsys.sys.t_spec.t_step
+                partition.set(tp1, self.clsys.func(t, partition(t)))
                 if partition.depth < self.opts.max_depth and \
-                    partition._n(t) >= partition._n(t + self.opts.gamma*self.clsys.sys.t_spec.t_step) :
-
+                    partition._n(tp1) >= partition._n(t + self.opts.gamma*self.clsys.sys.t_spec.t_step) :
                     # Contraction Guided Adaptive Partitioning algorithm
                     wt0 = width(x0, self.opts.eps); mwt0 = np.max(wt0)
-                    wtm = width(partition(t), self.opts.eps); mwtm = np.max(wtm)
+                    wtm = width(partition(tp1), self.opts.eps); mwtm = np.max(wtm)
                     C = mwtm / mwt0
-                    if (C**(1/self.opts.gamma))*mwtm > 1 :
+                    if (C**(1/self.opts.gamma))*mwt0 > 1 :
                         partition.revert(tt[0])
                         sub_primer = partition.primer_depth < self.opts.max_primer_depth
                         if sub_primer and partition.primer :

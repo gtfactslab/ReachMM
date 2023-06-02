@@ -170,7 +170,7 @@ def d_positive (B, separate=True) :
         return ret
 
 sg_box = lambda x, xi=0, yi=1 : sg.box(x[xi].l,x[yi].l,x[xi].u,x[yi].u)
-sg_boxes = lambda xx, xi=0, yi=0 : [sg_box(x, xi, yi) for x in xx]
+sg_boxes = lambda xx, xi=0, yi=1 : [sg_box(x, xi, yi) for x in xx]
 
 def draw_sg_union (ax, boxes, **kwargs) :
     shape = so.unary_union(boxes)

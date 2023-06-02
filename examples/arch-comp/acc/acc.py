@@ -1,3 +1,9 @@
+import argparse
+parser = argparse.ArgumentParser(description="ARCH-COMP Adaptive Cruise Control")
+parser.add_argument('-N', '--runtime_N', help="Number of calls for time averaging",
+                    type=int, default=1)
+args = parser.parse_args()
+
 import numpy as np
 import interval
 from interval import from_cent_pert, get_lu, get_cent_pert
@@ -65,13 +71,15 @@ def run () :
     rs = partitioner.compute_reachable_set(0,t_end,x0,popts)
     safe = rs.check_safety(spec_lam, tt)
     return rs, safe
-(rs, safe), times = run_times(1, run)
+(rs, safe), times = run_times(args.runtime_N, run)
 
 print(f'Safe: {safe} in {np.mean(times)} \\pm {np.std(times)} (s)')
 
 xx = rs(tt).T
 
-fig, ax = plt.subplots(1, 1, squeeze=True)
+plt.rc('font', size=14)
+fig, ax = plt.subplots(1, 1, figsize=[6,4], squeeze=True)
+fig.subplots_adjust(left=0.125, right=0.95, bottom=0.15, top=0.925, wspace=0.125, hspace=0.25)
 
 Drel_xx  = sp.lambdify((x_vars,), Drel , 'numpy')(xx)
 Drel_l, Drel_u = get_lu(Drel_xx)
@@ -84,4 +92,10 @@ ax.fill_between(tt, Drel_l, Drel_u, color='tab:blue', alpha=0.25)
 pltl = ax.plot(tt, Dsafe_l, color='tab:red')
 pltu = ax.plot(tt, Dsafe_u, color='tab:red')
 ax.fill_between(tt, Dsafe_l, Dsafe_u, color='tab:red', alpha=0.25)
+
+ax.set_xlabel('Time (s)',labelpad=0.1)
+ax.set_ylabel('Distance (m)',labelpad=0.1)
+
+fig.savefig('figures/acc.pdf')
+
 plt.show()

@@ -22,28 +22,29 @@ import polytope
 
 x1, x2, u, w = sp.symbols('x1 x2 u w')
 
-# f_eqn = [
-#     x1 + x2 + 0.5*u,
-#     x2 + u
-# ]
 f_eqn = [
-    x2 + 0.5*u,
-    u
+    x1 + x2 + 0.5*u,
+    x2 + u
 ]
+# f_eqn = [
+#     x2 + 0.5*u,
+#     u
+# ]
 
-# t_spec = DiscreteTimeSpec()
-t_spec = ContinuousTimeSpec(1,1)
+t_spec = DiscreteTimeSpec()
+# t_spec = ContinuousTimeSpec(1,1)
 t_end = 5; tt = t_spec.tt(0,t_end)
 sys = System([x1, x2], [u], [w], f_eqn, t_spec)
 net = NeuralNetwork('models/10r5r1')
-clsys = NNCSystem(sys, net, 'interconnect')
+clsys = NNCSystem(sys, net, 'jacobian')
 print(clsys)
 
 # partitioner = UniformPartitioner(clsys)
 # popts = UniformPartitioner.Opts(6,2)
 # unipartitioner = UniformPartitioner(clsys)
 # cgpartitioner  = CGPartitioner(clsys)
-popts = [CGPartitioner.Opts(0.1,3,1), CGPartitioner.Opts(0.05,6,2)]
+popts = [CGPartitioner.Opts(0.1,3,1,1), CGPartitioner.Opts(0.05,6,2,1)]
+# popts = [UniformPartitioner.Opts(0,0), UniformPartitioner.Opts(6,2)]
 
 x0 = np.array([
     np.interval(2.5,3.0),
@@ -66,8 +67,9 @@ for axi, ax in enumerate(axs) :
         return partitioner.compute_reachable_set(0, t_end, x0, popt)
     rs, runtimes = run_times(args.runtime_N, run)
     print(f'Runtime: {np.mean(runtimes)} \\pm {np.std(runtimes)}')
+    print(f'Area: {rs.area(t_end)}')
 
-    rs.draw_rs(ax, tt)
+    rs.draw_rs(ax, tt, lw=1)
 
     ax.set_xlim([-1,3.5])
     ax.set_ylim([-1.5,1])
@@ -76,7 +78,6 @@ for axi, ax in enumerate(axs) :
         traj.scatter2d(axs[0], tt, s=0.25, c='r')
         traj.scatter2d(axs[1], tt, s=0.25, c='r')
     
-
     LP_parts = ['4.npy', '16.npy']
     # LP_parts = ['55.npy', '205.npy']
     LipBnB_eps = ['0.1.npy', '0.001.npy']
@@ -89,7 +90,7 @@ for axi, ax in enumerate(axs) :
         boxes = [sg.box(box[0,0],box[1,0],box[0,1],box[1,1]) for box in LP_rs[:,t-1,:,:]]
         shape = so.unary_union(boxes)
         xs, ys = shape.exterior.xy    
-        ax.fill(xs, ys, alpha=1, fc='none', ec='tab:orange', lw=2)
+        ax.fill(xs, ys, alpha=1, fc='none', ec='tab:orange', lw=1)
         print(shape.area)
 
     # ReachLipBnB
@@ -99,17 +100,18 @@ for axi, ax in enumerate(axs) :
     for k in range(len(BnB_AAs)) :
         AA = BnB_AAs[k]; bb = BnB_bbs[k]
         pltp = polytope.Polytope(AA, bb)
-        lipbnb = pltp.plot(ax, alpha=1, color='none', edgecolor='tab:green', linewidth=2, linestyle='-')
+        lipbnb = pltp.plot(ax, alpha=1, color='none', edgecolor='tab:green', linewidth=1, linestyle='-')
         lipbnb.set_label('ReachLipBnB')
         print(pltp.volume)
 
     legendhack = [
-        Line2D([0], [0], lw=2, color='tab:blue', label='ReachMM-CG'),
-        Line2D([0], [0], lw=2, color='tab:orange', label='ReachLP-Uniform'),
-        Line2D([0], [0], lw=2, color='tab:green', label='ReachLipBnB'),
+        Line2D([0], [0], lw=1, color='tab:blue', label='ReachMM-CG'),
+        Line2D([0], [0], lw=1, color='tab:orange', label='ReachLP-Uniform'),
+        Line2D([0], [0], lw=1, color='tab:green', label='ReachLipBnB'),
     ]
 
     ax.legend(legendhack, ['ReachMM-CG', 'ReachLP-Uniform', 'ReachLipBnB'])
 
+fig.savefig('figures/ojcsys2023/DI.pdf')
 
 plt.show()

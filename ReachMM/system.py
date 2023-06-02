@@ -21,8 +21,14 @@ class Trajectory :
         t_alloc = t0 + 10 if t_alloc is None else t_alloc
         self.xx = np.empty((self.t_spec.lentt(t0,t_alloc)+1,) + x0.shape, x0.dtype)
 
-        self._n = lambda t : np.round((t - self.t0)/self.t_spec.t_step).astype(int)
+        # self._n = lambda t : np.round((t - self.t0)/self.t_spec.t_step).astype(int)
         self.set(t0,x0)
+
+    def _n (self, t) :
+        t = np.asarray(t)
+        if t.ndim == 0 :
+            return round((t - self.t0)/self.t_spec.t_step)
+        return np.round((t - self.t0)/self.t_spec.t_step).astype(int)
 
     def set (self, t, x) :
         if self._n(t) > self._n(self.tf) :
@@ -52,7 +58,17 @@ class Trajectory :
     # def to_rs (self) :
     #     partition = 
 
+    def _call_single(self, t) :
+        n = self._n(t)
+        if n <= self._n(self.tf) :
+            return self.xx[n]
+        else :
+            raise Exception(f'Trajectory not defined at {t} \\notin [{self.t0},{self.tf}]')
+
     def __call__(self, t) :
+        t = np.asarray(t)
+        if t.ndim == 0:
+            return self._call_single(t)
         not_def = np.logical_or(self._n(t) > self._n(self.tf), self._n(t) < self._n(self.t0))
         if np.any(not_def) :
             raise Exception(f'Trajectory not defined at {t[not_def]} \\notin [{self.t0},{self.tf}]')
