@@ -1,9 +1,10 @@
 from __future__ import annotations
-from zipapp import get_interpreter
+from typing import NamedTuple, List
 import numpy as np
 import sympy as sp
 import interval
 from interval import get_lu, get_iarray, has_nan
+from inclusion import Corner, Ordering, two_orderings, two_corners
 from ReachMM.time import *
 from ReachMM.neural import NeuralNetwork, NeuralNetworkControl
 from ReachMM.control import Disturbance, NoDisturbance, Control, NoControl
@@ -222,9 +223,19 @@ class AutonomousSystem (ControlledSystem) :
     def __str__ (self) :
         return f'''===== Autonomous System Definition =====
             \r{self.sys.__str__()}'''
+
+
+
 class NNCSystem (ControlledSystem) :
-    def __init__(self, sys:System, nn:NeuralNetwork, incl_method='jacobian', interc_mode=None,
-                 dist:Disturbance=NoDisturbance(1), uclip=np.interval(-np.inf,np.inf), g_tuple=None, g_eqn=None) -> None:
+    class InclOpts (NamedTuple) :
+        method: str = 'interconnect'
+        interc_mode: str = 'hybrid'
+        orderings: List[Ordering] = list()
+        corners: List[Corner] = list()
+
+    def __init__(self, sys:System, nn:NeuralNetwork, incl_method:InclOpts = InclOpts(), interc_mode=None,
+                 dist:Disturbance=NoDisturbance(1), uclip=np.interval(-np.inf,np.inf),
+                 g_tuple=None, g_eqn=None) -> None:
         self.nn = nn
         ControlledSystem.__init__(self, sys, NeuralNetworkControl(nn, interc_mode, uclip=uclip, g_tuple=g_tuple, g_eqn=g_eqn),
                                   interc_mode, dist)
