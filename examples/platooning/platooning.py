@@ -1,6 +1,7 @@
 import numpy as np
 import interval
 from interval import from_cent_pert, get_lu, get_cent_pert
+from inclusion import standard_ordering
 import torch
 import torch.nn as nn
 import sympy as sp
@@ -82,8 +83,10 @@ def platoon (N, show_plot, runtime_N, rset=0.5, kp=5, kv=5, u_lim=5.0) :
     # net.seq[0].weight = nn.Parameter(W)
 
     dist = UniformDisturbance([np.interval(-0.001,0.001) for w in w_vars])
-    clsys = NNCSystem(sys, net, 'interconnect', dist=dist,
+    clsys = NNCSystem(sys, net, NNCSystem.InclOpts('interconnect'), dist=dist,
                       g_tuple=(x_vars,), g_eqn=list(x[0]))
+    # clsys.set_standard_ordering()
+    # clsys.set_four_corners()
     t_end = 1.5
     print(clsys)
     partitioner = UniformPartitioner(clsys)

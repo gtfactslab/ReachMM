@@ -4,7 +4,7 @@ import numpy as np
 import sympy as sp
 import interval
 from interval import get_lu, get_iarray, has_nan
-from inclusion import Corner, Ordering, two_orderings, two_corners
+from inclusion import Corner, Ordering, two_orderings, two_corners, standard_ordering
 from ReachMM.time import *
 from ReachMM.neural import NeuralNetwork, NeuralNetworkControl
 from ReachMM.control import Disturbance, NoDisturbance, Control, NoControl
@@ -253,6 +253,11 @@ class NNCSystem (ControlledSystem) :
         self.ujCALCx_ = None
         self.ujCALC_x = None
         self.incl_method = None
+    
+    def set_standard_ordering (self) :
+        self.incl_opts = self.incl_opts._replace(
+            orderings=standard_ordering(self.sys.xlen + self.sys.ulen + self.sys.wlen)
+        )
 
     def set_four_corners (self) :
         _x = (-1,)*self.sys.xlen; x_ = (1,)*self.sys.xlen

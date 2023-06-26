@@ -1,6 +1,7 @@
 import numpy as np
 import interval
 from interval import from_cent_pert, get_lu, get_cent_pert
+from inclusion import Ordering
 import sympy as sp
 from ReachMM.time import *
 from ReachMM.system import *
@@ -23,13 +24,17 @@ f_eqn = [
 # print(spec)
 # spec_lam = sp.lambdify((x_vars,), spec, 'numpy')
 
-t_spec = ContinuousTimeSpec(0.05,0.2)
+# t_spec = ContinuousTimeSpec(0.05,0.2)
+t_spec = ContinuousTimeSpec(0.2,0.2)
 # t_spec = DiscretizedTimeSpec(0.2)
 sys = System(x_vars, u_vars, [w], f_eqn, t_spec)
 net = NeuralNetwork('models/controllerB_nnv')
-clsys = NNCSystem(sys, net, 'interconnect',
+clsys = NNCSystem(sys, net, 
+                  NNCSystem.InclOpts('jacobian+interconnect',
+                                     orderings=[Ordering((0,1,2,3,4,5))]),
                   dist=ConstantDisturbance([0], [np.interval(-0.001,0.001)]))
-t_end = 7
+clsys.set_four_corners()
+t_end = 5
 
 x0 = np.array([
     np.interval(9.5,9.55),
@@ -40,10 +45,10 @@ x0 = np.array([
 xcent, xpert = get_cent_pert(x0)
 # print(net.seq[0].weight.detach().numpy() @ xcent + net.seq[0].bias.detach().numpy())
 
-partitioner = UniformPartitioner(clsys)
-popts = UniformPartitioner.Opts(3, 1)
-# partitioner = CGPartitioner(clsys)
-# popts = CGPartitioner.Opts(0.06, 0.5, 3, 1)
+# partitioner = UniformPartitioner(clsys)
+# popts = UniformPartitioner.Opts(1,0)
+partitioner = CGPartitioner(clsys)
+popts = CGPartitioner.Opts(0.06, 0.5, 3, 1)
 
 tt = t_spec.tt(0,t_end)
 
