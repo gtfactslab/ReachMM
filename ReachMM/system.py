@@ -8,7 +8,7 @@ from inclusion import Corner, Ordering, two_orderings, two_corners
 from ReachMM.time import *
 from ReachMM.neural import NeuralNetwork, NeuralNetworkControl
 from ReachMM.control import Disturbance, NoDisturbance, Control, NoControl
-from ReachMM.utils import d_metzler, d_positive, gen_ics_iarray
+from ReachMM.utils import d_metzler, d_positive, gen_ics_iarray, set_columns_from_corner
 from pprint import pformat
 from numba import jit
 from inspect import getsource
@@ -80,6 +80,10 @@ class System :
         self.x_vars = sp.Matrix(x_vars)
         self.u_vars = sp.Matrix(u_vars)
         self.w_vars = sp.Matrix(w_vars)
+        self.xlen = len(x_vars)
+        self.ulen = len(u_vars)
+        self.wlen = len(w_vars)
+
         self.t_spec = t_spec
         self.x_clip = x_clip
 
@@ -98,6 +102,7 @@ class System :
         self.f     = sp.lambdify(tuple, self.f_eqn, 'numpy', cse=my_cse)
         self.f_i   = [sp.lambdify(tuple, f_eqn_i, 'numpy', cse=my_cse) for f_eqn_i in self.f_eqn]
         self.f_len = len(self.f_i)
+
 
         # self.g_none = g_eqn is None
         # self.g_eqn = g_eqn if not self.g_none else self.x_vars
@@ -121,6 +126,9 @@ class System :
             self.Df_x = sp.lambdify(tuple, self.Df_x_sym, 'numpy', cse=my_cse)
             self.Df_u = sp.lambdify(tuple, self.Df_u_sym, 'numpy', cse=my_cse)
             self.Df_w = sp.lambdify(tuple, self.Df_w_sym, 'numpy', cse=my_cse)
+            self.Df_x_i = [sp.lambdify(tuple, self.Df_x_sym[:,i], 'numpy') for i in range(self.xlen)] 
+            self.Df_u_i = [sp.lambdify(tuple, self.Df_u_sym[:,i], 'numpy') for i in range(self.ulen)] 
+            self.Df_w_i = [sp.lambdify(tuple, self.Df_w_sym[:,i], 'numpy') for i in range(self.wlen)] 
             self.type = 'nonlinear'
 
 
@@ -228,59 +236,82 @@ class AutonomousSystem (ControlledSystem) :
 
 class NNCSystem (ControlledSystem) :
     class InclOpts (NamedTuple) :
-        method: str = 'interconnect'
+        method: str = 'jacobian+interconnect'
         interc_mode: str = 'hybrid'
         orderings: List[Ordering] = list()
         corners: List[Corner] = list()
 
-    def __init__(self, sys:System, nn:NeuralNetwork, incl_method:InclOpts = InclOpts(), interc_mode=None,
+    def __init__(self, sys:System, nn:NeuralNetwork, incl_opts:InclOpts = InclOpts(), interc_mode=None,
                  dist:Disturbance=NoDisturbance(1), uclip=np.interval(-np.inf,np.inf),
                  g_tuple=None, g_eqn=None) -> None:
         self.nn = nn
-        ControlledSystem.__init__(self, sys, NeuralNetworkControl(nn, interc_mode, uclip=uclip, g_tuple=g_tuple, g_eqn=g_eqn),
+        ControlledSystem.__init__(self, sys, NeuralNetworkControl(nn, incl_opts.interc_mode, uclip=uclip, g_tuple=g_tuple, g_eqn=g_eqn),
                                   interc_mode, dist)
-        self.incl_method = incl_method
+        self.incl_opts = incl_opts
         self.e = None
         self.uj = None
         self.ujCALCx_ = None
         self.ujCALC_x = None
+        self.incl_method = None
+
+    def set_four_corners (self) :
+        _x = (-1,)*self.sys.xlen; x_ = (1,)*self.sys.xlen
+        _u = (-1,)*self.sys.ulen; u_ = (1,)*self.sys.ulen
+        _w = (-1,)*self.sys.wlen; w_ = (1,)*self.sys.wlen
+        self.incl_opts = self.incl_opts._replace(
+            corners=[Corner(_x + _u + _w), Corner(x_ + _u + w_),
+                     Corner(_x + u_ + _w), Corner(x_ + u_ + w_)])
+
+    def set_two_corners (self) :
+        _x = (-1,)*self.sys.xlen; x_ = (1,)*self.sys.xlen
+        _u = (-1,)*self.sys.ulen; u_ = (1,)*self.sys.ulen
+        _w = (-1,)*self.sys.wlen; w_ = (1,)*self.sys.wlen
+        self.incl_opts = self.incl_opts._replace(
+            corners=[Corner(_x + _u + _w), Corner(x_ + u_ + w_)])
     
     def prime (self, x):
         # self.control.prime(x)
-        if self.incl_method == 'jacobian' :
-            if self.sys.t_spec.type == 'continuous' :
-                self.e = np.zeros(self.sys.f_len, dtype=np.interval)
-                # self.control.step(0, x)
-                self.uj = np.copy(self.control.iuCALC)
-                self.ujCALCx_ = np.copy(self.control.iuCALCx_)
-                self.ujCALC_x = np.copy(self.control.iuCALC_x)
+        # if self.incl_method == 'jacobian' :
+        if self.sys.t_spec.type == 'continuous' :
+            self.e = np.zeros(self.sys.f_len, dtype=np.interval)
+            # self.control.step(0, x)
+            self.uj = np.copy(self.control.iuCALC)
+            self.ujCALCx_ = np.copy(self.control.iuCALCx_)
+            self.ujCALC_x = np.copy(self.control.iuCALC_x)
     
     def func (self, t, x) :
         # Returns x_{t+1} given x_t (euler disc. for continuous time based on t_spec.t_step)
         # Assumes access to pre-computed control in self.control (call control.step before this)
         # Monotone Inclusion
         if x.dtype == np.interval :
-            if self.incl_method == 'jacobian' :
-                if self.sys.t_spec.type == 'continuous' :
-                    if self.sys.type == 'nonlinear' :
-                        return np.intersection(self._nl_jac_cont(t, x), self.sys.x_clip)
-                    elif self.sys.type == 'linear' :
-                        return self._l_jac_cont(t, x)
-                        # return self._nl_jac_cont(t, x)
-                else :
-                    if self.sys.type == 'nonlinear' :
-                        return self._nl_jac_disc(t, x)
-                    elif self.sys.type == 'linear' :
-                        return self._l_jac_disc(t, x)
-            elif self.incl_method == 'interconnect' :
-                if self.sys.t_spec.type == 'continuous' :
-                    _x, x_ = get_lu(x)
-                    d_x, dx_ = self.f_replace(x)
-                    _xtp1 = _x + self.sys.t_spec.t_step * d_x
-                    x_tp1 = x_ + self.sys.t_spec.t_step * dx_
-                    return np.intersection(get_iarray(_xtp1, x_tp1), self.sys.x_clip)
-                else :
-                    return self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
+            ret = []
+            for method in self.incl_opts.method.split('+') :
+                self.incl_method = method
+                if method == 'jacobian' :
+                    if self.sys.t_spec.type == 'continuous' :
+                        if self.sys.type == 'nonlinear' :
+                            ret.append(np.intersection(self._nl_jac_cont(t, x), self.sys.x_clip))
+                        elif self.sys.type == 'linear' :
+                            ret.append(np.intersection(self._l_jac_cont(t, x), self.sys.x_clip))
+                            # return self._nl_jac_cont(t, x)
+                    else :
+                        if self.sys.type == 'nonlinear' :
+                            ret.append(np.intersection(self._nl_jac_disc(t, x), self.sys.x_clip))
+                        elif self.sys.type == 'linear' :
+                            ret.append(np.intersection(self._l_jac_disc(t, x), self.sys.x_clip))
+                elif method == 'interconnect' :
+                    if self.sys.t_spec.type == 'continuous' :
+                        # Natural Inclusion with Replacements
+                        _x, x_ = get_lu(x)
+                        d_x, dx_ = self.f_replace(x)
+                        _xtp1 = _x + self.sys.t_spec.t_step * d_x
+                        x_tp1 = x_ + self.sys.t_spec.t_step * dx_
+                        ret.append(np.intersection(get_iarray(_xtp1, x_tp1), self.sys.x_clip))
+                    else :
+                        # Natural Inclusion Function
+                        ret.append(np.intersection(self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1), self.sys.x_clip))
+            _ret, ret_ = get_lu(np.array(ret))
+            return get_iarray(np.max(_ret, axis=0), np.min(ret_, axis=0))
         # Deterministic system
         else :
             if self.sys.t_spec.type == 'continuous' :
@@ -299,104 +330,118 @@ class NNCSystem (ControlledSystem) :
         _x, x_ = get_lu(x)
         _u, u_ = get_lu(self.uj)
         _w, w_ = get_lu(w)
-        A, B, D = self.sys.get_ABD(x, self.uj, w)
-        _A, A_ = get_lu(A)
-        _B, B_ = get_lu(B)
-        _D, D_ = get_lu(D)
-        _Bp, _Bn = d_positive(_B)
-        B_p, B_n = d_positive(B_)
-        _Dp, _Dn = d_positive(_D)
-        D_p, D_n = d_positive(D_)
+
+        n = self.sys.xlen
+        p = self.sys.ulen
+        q = self.sys.wlen
+
+        _d = []; d_ = []
 
         _e, e_ = get_lu(self.e)
 
-        # Centered around _x, _u
-        _K = _Bp@self.control._C + _Bn@self.control.C_
-        K_ = B_p@self.control.C_ + B_n@self.control._C
-        _Kp, _Kn = d_positive(_K)
-        K_p, K_n = d_positive(K_)
-        _c = - _Kn@_e - _Kp@e_ 
-        c_ = - K_n@e_ - K_p@_e
-        # _c = 0
-        # c_ = 0
-        _L = _A + _K
-        L_ = A_ + K_
-        _Lp, _Ln = d_metzler(_L)
-        L_p, L_n = d_metzler(L_)
-        f = self.sys.f(_x,_u,_w)[0].reshape(-1)
-        d_x1 = _Lp@_x + _Ln@x_ + _c - _A@_x - _B@_u - _D@_w + _Bp@self.control._d + _Bn@self.control.d_ + _Dp@_w + _Dn@w_ + f
-        dx_1 = L_p@x_ + L_n@_x + c_ - A_@_x - B_@_u - D_@_w + B_p@self.control.d_ + B_n@self.control._d + D_n@_w + D_p@w_ + f
+        for corner in self.incl_opts.corners :
+            if self.incl_opts.orderings :
+                # Mixed Cornered Algorithm
+                xc = np.array([(_x[i] if corner[i] == 0 else x_[i]) for i in range(n)])
+                uc = np.array([(_u[i] if corner[i+n] == 0 else u_[i]) for i in range(p)])
+                wc = np.array([(_w[i] if corner[i+n+p] == 0 else w_[i]) for i in range(q)])
+                fc = self.sys.f(xc, uc, wc)[0].reshape(-1)
 
-        # Centered around _x, u_
-        _K = B_p@self.control._C + B_n@self.control.C_
-        K_ = _Bp@self.control.C_ + _Bn@self.control._C
-        _Kp, _Kn = d_positive(_K)
-        K_p, K_n = d_positive(K_)
-        _c = - _Kn@_e - _Kp@e_ 
-        c_ = - K_n@e_ - K_p@_e
-        # _c = 0
-        # c_ = 0
-        _L = _A + _K
-        L_ = A_ + K_
-        _Lp, _Ln = d_metzler(_L)
-        L_p, L_n = d_metzler(L_)
-        f = self.sys.f(_x,u_,_w)[0].reshape(-1)
-        d_x2 = _Lp@_x + _Ln@x_ + _c - _A@_x - B_@u_ - _D@_w + B_p@self.control._d + B_n@self.control.d_ + _Dp@_w + _Dn@w_ + f
-        dx_2 = L_p@x_ + L_n@_x + c_ - A_@_x - _B@u_ - D_@_w + _Bp@self.control.d_ + _Bn@self.control._d + D_n@_w + D_p@w_ + f
+                A, B, D = self.sys.get_ABD(x, self.uj, w)
+                _A, A_ = get_lu(A); _B, B_ = get_lu(B); _D, D_ = get_lu(D)
 
-        # Centered around x_, _u
-        _K = _Bp@self.control._C + _Bn@self.control.C_
-        K_ = B_p@self.control.C_ + B_n@self.control._C
-        _Kp, _Kn = d_positive(_K)
-        K_p, K_n = d_positive(K_)
-        _c = - _Kn@_e - _Kp@e_ 
-        c_ = - K_n@e_ - K_p@_e
-        # _c = 0
-        # c_ = 0
-        _L = A_ + _K
-        L_ = _A + K_
-        _Lp, _Ln = d_metzler(_L)
-        L_p, L_n = d_metzler(L_)
-        f = self.sys.f(x_,_u,w_)[0].reshape(-1)
-        d_x3 = _Lp@_x + _Ln@x_ + _c - A_@x_ - _B@_u - D_@w_ + _Bp@self.control._d + _Bn@self.control.d_ + _Dp@_w + _Dn@w_ + f
-        dx_3 = L_p@x_ + L_n@_x + c_ - _A@x_ - B_@_u - _D@w_ + B_p@self.control.d_ + B_n@self.control._d + D_n@_w + D_p@w_ + f
+                for ordering in self.incl_opts.orderings :
+                    _Jx, J_x = set_columns_from_corner(corner[:n], _A, A_)
+                    _Ju, J_u = set_columns_from_corner(corner[n:n+p], _B, B_)
+                    _Jw, J_w = set_columns_from_corner(corner[n+p:], _D, D_)
 
-        # Centered around x_, u_
-        _K = B_p@self.control._C + B_n@self.control.C_
-        K_ = _Bp@self.control.C_ + _Bn@self.control._C
-        _Kp, _Kn = d_positive(_K)
-        K_p, K_n = d_positive(K_)
-        _c = - _Kn@_e - _Kp@e_ 
-        c_ = - K_n@e_ - K_p@_e
-        # _c = 0
-        # c_ = 0
-        _L = A_ + _K
-        L_ = _A + K_
-        _Lp, _Ln = d_metzler(_L)
-        L_p, L_n = d_metzler(L_)
-        f = self.sys.f(x_,u_,w_)[0].reshape(-1)
-        d_x4 = _Lp@_x + _Ln@x_ + _c - A_@x_ - B_@u_ - D_@w_ + B_p@self.control._d + B_n@self.control.d_ + _Dp@_w + _Dn@w_ + f
-        dx_4 = L_p@x_ + L_n@_x + c_ - _A@x_ - _B@u_ - _D@w_ + _Bp@self.control.d_ + _Bn@self.control._d + D_n@_w + D_p@w_ + f
+                    xr = np.copy(xc).astype(np.interval)
+                    ur = np.copy(uc).astype(np.interval)
+                    wr = np.copy(wc).astype(np.interval)
 
-        # Bounding the difference: error dynamics
-        self.control.step(0, x)
-        self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.uj, w)[0].reshape(-1)
-        # self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.control.iuCALC, w)[0].reshape(-1)
-        # d_e, de_ = self.f_replace(x, self.control.iuCALC_x, self.control.iuCALCx_)
-        # _etp1 = _e + self.sys.t_spec.t_step * d_e
-        # e_tp1 = e_ + self.sys.t_spec.t_step * de_
-        # self.e = get_iarray(_etp1, e_tp1)
+                    for j in range(len(ordering)) :
+                        i = ordering[j]
+                        if   i < n :
+                            xr[i] = x[i]
+                            _J, J_ = get_lu(self.sys.Df_x_i[i](xr, ur, wr).astype(np.interval).reshape(-1))
+                            _Jx[:,i] = _J
+                            J_x[:,i] = J_
+                        elif i < n + p :
+                            k = i - n
+                            ur[k] = self.uj[k]
+                            _J, J_ = get_lu(self.sys.Df_u_i[k](xr, ur, wr).astype(np.interval).reshape(-1))
+                            _Ju[:,k] = _J
+                            J_u[:,k] = J_
+                        elif i < n + p + q :
+                            k = i - n - p
+                            wr[k] = w[k]
+                            _J, J_ = get_lu(self.sys.Df_w_i[k](xr, ur, wr).astype(np.interval).reshape(-1))
+                            _Jw[:,k] = _J
+                            J_w[:,k] = J_
 
+                    _Bp, _Bn = d_positive(_Ju); B_p, B_n = d_positive(J_u)
+                    _K = _Bp@self.control._C + _Bn@self.control.C_
+                    K_ = B_p@self.control.C_ + B_n@self.control._C
+                    _Dp, _Dn = d_positive(_Jw); D_p, D_n = d_positive(J_w)
 
-        # Interconnection mode
-        d_x5, dx_5 = self.f_replace(x, self.ujCALC_x, self.ujCALCx_)
+                    _H = _Jx + _K
+                    H_ = J_x + K_
+                    _Hp, _Hn = d_metzler(_H); H_p, H_n = d_metzler(H_)
 
-        _xtp1 = _x + self.sys.t_spec.t_step * np.max(np.array([d_x1,d_x2,d_x3,d_x4,d_x5]), axis=0)
-        x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([dx_1,dx_2,dx_3,dx_4,dx_5]), axis=0)
-        # _xtp1 = _x + self.sys.t_spec.t_step * np.max(np.array([d_x1,d_x2,d_x3,d_x4]), axis=0)
-        # x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([dx_1,dx_2,dx_3,dx_4]), axis=0)
-        # _xtp1 = _x + self.sys.t_spec.t_step * np.max(np.array([d_x1,d_x4]), axis=0)
-        # x_tp1 = x_ + self.sys.t_spec.t_step * np.min(np.array([dx_1,dx_4]), axis=0)
+                    # Bounding the difference: error dynamics for Holding effects
+                    # _c = 0
+                    # c_ = 0
+                    _Kp, _Kn = d_positive(_K); K_p, K_n = d_positive(K_)
+                    _c = - _Kn@_e - _Kp@e_
+                    c_ = - K_n@e_ - K_p@_e
+                    self.control.step(0, x)
+                    self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.uj, w)[0].reshape(-1)
+
+                    _d.append(_Hp@_x + _Hn@x_ - _Jx@xc - _Ju@uc + _Bp@self.control._d + _Bn@self.control.d_
+                            + _Dp@_w - _Dp@w_ + fc + _c)
+                    d_.append(H_n@_x + H_p@x_ - J_x@xc - J_u@uc + B_n@self.control._d + B_p@self.control.d_ 
+                            - D_p@_w + D_p@w_ + fc + c_)
+            else :
+                # Cornered Algorithm
+                xc = np.array([(_x[i] if corner[i] == 0 else x_[i]) for i in range(n)])
+                uc = np.array([(_u[i] if corner[i+n] == 0 else u_[i]) for i in range(p)])
+                wc = np.array([(_w[i] if corner[i+n+p] == 0 else w_[i]) for i in range(len(_w))])
+                fc = self.sys.f(xc, uc, wc)[0].reshape(-1)
+
+                A, B, D = self.sys.get_ABD(x, self.uj, w)
+                _A, A_ = get_lu(A); _B, B_ = get_lu(B); _D, D_ = get_lu(D)
+
+                _Jx, J_x = set_columns_from_corner(corner[:n], _A, A_)
+                _Ju, J_u = set_columns_from_corner(corner[n:n+p], _B, B_)
+                _Jw, J_w = set_columns_from_corner(corner[n+p:], _D, D_)
+
+                _Bp, _Bn = d_positive(_Ju); B_p, B_n = d_positive(J_u)
+                _K = _Bp@self.control._C + _Bn@self.control.C_
+                K_ = B_p@self.control.C_ + B_n@self.control._C
+                _Dp, _Dn = d_positive(_Jw); D_p, D_n = d_positive(J_w)
+
+                _H = _Jx + _K
+                H_ = J_x + K_
+                _Hp, _Hn = d_metzler(_H); H_p, H_n = d_metzler(H_)
+
+                # Bounding the difference: error dynamics for Holding effects
+                # _c = 0
+                # c_ = 0
+                _Kp, _Kn = d_positive(_K); K_p, K_n = d_positive(K_)
+                _c = - _Kn@_e - _Kp@e_
+                c_ = - K_n@e_ - K_p@_e
+                self.control.step(0, x)
+                self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.uj, w)[0].reshape(-1)
+
+                _d.append(_Hp@_x + _Hn@x_ - _Jx@xc - _Ju@uc + _Bp@self.control._d + _Bn@self.control.d_
+                          + _Dp@_w - _Dp@w_ + fc + _c)
+                d_.append(H_n@_x + H_p@x_ - J_x@xc - J_u@uc + B_n@self.control._d + B_p@self.control.d_ 
+                          - D_p@_w + D_p@w_ + fc + c_)
+        
+        _d = np.array(_d); d_ = np.array(d_)
+
+        _xtp1 = _x + self.sys.t_spec.t_step * np.max(_d, axis=0)
+        x_tp1 = x_ + self.sys.t_spec.t_step * np.min(d_, axis=0)
         return get_iarray(_xtp1, x_tp1)
     
     def _nl_jac_disc (self, t, x) :

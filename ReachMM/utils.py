@@ -213,3 +213,16 @@ def plot_iarray_t (ax, tt, x, **kwargs) :
     ax.fill_between(tt, xl, xu, alpha=alpha, label=label, **kwargs)
     ax.plot(tt, xl, **kwargs)
     ax.plot(tt, xu, **kwargs)
+
+
+def set_columns_from_corner (corner, _A, A_) :
+    # Set i-th column of A based on corner
+    _Jx = np.empty_like(_A); J_x = np.empty_like(A_)
+    for i in range(len(corner)) :
+        if corner[i] == 0 :
+            _Jx[:,i] = _A[:,i] # Use _A when cornered on lb
+            J_x[:,i] = A_[:,i] # Use A_ when cornered on lb
+        else :
+            _Jx[:,i] = A_[:,i] # Use A_ when cornered on ub
+            J_x[:,i] = _A[:,i] # Use _A when cornered on ub
+    return _Jx, J_x
