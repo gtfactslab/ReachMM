@@ -75,17 +75,49 @@ class Trajectory :
             raise Exception(f'Trajectory not defined at {t[not_def]} \\notin [{self.t0},{self.tf}]')
         return self.xx[self._n(t),:]
 
+class AffineRefine :
+    # Defines a relation Mz = b.
+    def __init__(self, M:np.typing.ArrayLike=None, b:np.typing.ArrayLike=None) -> None:
+        self.M = M
+        self.b = b
+
+    def __call__ (self, z) :
+        if self.M is None :
+            return z
+        if z.dtype != np.interval :
+            raise Exception('Call refine with an interval')
+        # ret = np.copy(z)
+        print(z)
+        alpha = self.b - self.M @ z
+        for j in range(self.M.shape[0]) :
+            for i in range(self.M.shape[1]) :
+                if np.abs(self.M[j,i]) > 1e-5 :
+                    alphaj = self.b[j] - (self.M[j,:i]@z[:i] + self.M[j,(i+1):]@z[(i+1):])
+                    mz = self.M[j,i] * z[i]
+                    zi = alphaj / self.M[j,i]
+                    # zi = np.interval(alphaj.l + mz.u, alphaj.u + mz.l) / self.M[j,i]
+                    # ret[i] = np.intersection(ret[i], zi)
+                    z[i] = np.intersection(z[i], zi)
+        print(z)
+        input()
+        # print(ret)
+        return z
+    
 class System :
-    def __init__(self, x_vars, u_vars, w_vars, f_eqn, t_spec:TimeSpec, x_clip=np.interval(-np.inf,np.inf)) -> None:
+    def __init__(self, x_vars, u_vars, w_vars, f_eqn, t_spec:TimeSpec,
+                 ref=AffineRefine(), x_clip=np.interval(-np.inf,np.inf)) -> None:
         self.x_vars = sp.Matrix(x_vars)
         self.u_vars = sp.Matrix(u_vars)
         self.w_vars = sp.Matrix(w_vars)
+
         self.xlen = len(x_vars)
         self.ulen = len(u_vars)
         self.wlen = len(w_vars)
 
         self.t_spec = t_spec
         self.x_clip = x_clip
+
+        self.ref = ref
 
         if t_spec.type == 'discrete' or t_spec.type == 'continuous' :
             self.f_eqn  = sp.Matrix(f_eqn)
@@ -103,12 +135,6 @@ class System :
         self.f_i   = [sp.lambdify(tuple, f_eqn_i, 'numpy', cse=my_cse) for f_eqn_i in self.f_eqn]
         self.f_len = len(self.f_i)
 
-
-        # self.g_none = g_eqn is None
-        # self.g_eqn = g_eqn if not self.g_none else self.x_vars
-        # self.g     = sp.lambdify(tuple, self.g_none, 'numpy', cse=my_cse)
-        # self.g_i   = [sp.lambdify(tuple, g_eqn_i, 'numpy', cse=my_cse) for g_eqn_i in self.g_eqn]
-        # self.g_len = len(self.g_i)
 
         self.Df_x_sym = self.f_eqn.jacobian(x_vars)
         self.Df_u_sym = self.f_eqn.jacobian(u_vars)
@@ -141,7 +167,7 @@ class System :
             return self.A, self.B, self.D
         else :
             return self.Df_x(x, u, w)[0].astype(x.dtype), self.Df_u(x, u, w)[0].astype(x.dtype), self.Df_w(x, u, w)[0].astype(x.dtype)
-    
+
 class ControlledSystem :
     def __init__(self, sys:System, control:Control, interc_mode=None,
                  dist:Disturbance=NoDisturbance(1), xclip=np.interval(-np.inf,np.inf)) :
@@ -161,7 +187,7 @@ class ControlledSystem :
     
     # Returns x_{t+1} given x_t.
     def func (self, t, x) :
-        self.control.step(t, self.sys.g(x))
+        # self.control.step(t, self.sys.g(x))
 
         # Monotone Inclusion
         if x.dtype == np.interval :
@@ -171,9 +197,9 @@ class ControlledSystem :
                 d_x, dx_ = self.f_replace(x)
                 _xtp1 = _x + self.sys.t_spec.t_step * d_x
                 x_tp1 = x_ + self.sys.t_spec.t_step * dx_
-                return get_iarray(_xtp1, x_tp1)
+                return self.sys.ref(get_iarray(_xtp1, x_tp1))
             else :
-                return self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1)
+                return self.sys.ref(self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1))
         # Deterministic system
         else :
             if self.sys.t_spec.type == 'continuous' :
@@ -224,9 +250,9 @@ class ControlledSystem :
         return d_x, dx_
 
 class AutonomousSystem (ControlledSystem) :
-    def __init__(self, x_vars, f_eqn, t_spec:TimeSpec):
+    def __init__(self, x_vars, f_eqn, t_spec:TimeSpec, ref=AffineRefine()):
         u, w = sp.symbols('_0u, _0w')
-        super().__init__(System(x_vars, [u], [w], f_eqn, t_spec), NoControl(1), None, NoDisturbance(1))
+        super().__init__(System(x_vars, [u], [w], f_eqn, t_spec, ref), NoControl(1), None, NoDisturbance(1))
 
     def __str__ (self) :
         return f'''===== Autonomous System Definition =====
@@ -316,7 +342,7 @@ class NNCSystem (ControlledSystem) :
                         # Natural Inclusion Function
                         ret.append(np.intersection(self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1), self.sys.x_clip))
             _ret, ret_ = get_lu(np.array(ret))
-            return get_iarray(np.max(_ret, axis=0), np.min(ret_, axis=0))
+            return self.sys.ref(get_iarray(np.max(_ret, axis=0), np.min(ret_, axis=0)))
         # Deterministic system
         else :
             if self.sys.t_spec.type == 'continuous' :

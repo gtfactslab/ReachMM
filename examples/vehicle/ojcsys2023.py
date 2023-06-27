@@ -65,7 +65,7 @@ partitioner = UniformPartitioner(clsys)
 
 # Experiment 1
 # opts = CGPartitioner.Opts(0.25, 0.1, 2, 0)
-opts = UniformPartitioner.Opts(0,0)
+opts = UniformPartitioner.Opts(1,0)
 rs, times = run_times(args.runtime_N, partitioner.compute_reachable_set, t_span[0], t_span[1], x0, opts)
 avg_runtime = np.mean(times); std_runtime = np.std(times)
 

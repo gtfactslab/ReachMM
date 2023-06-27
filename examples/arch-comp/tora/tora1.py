@@ -10,14 +10,16 @@ from ReachMM.control import ConstantDisturbance
 from ReachMM.utils import run_times, draw_iarray
 import matplotlib.pyplot as plt
 
-x1, x2, x3, x4, u, w = sp.symbols('x1 x2 x3 x4 u w')
-x_vars = [x1, x2, x3, x4]
+x1, x2, x3, x4, y1, y2, u, w = sp.symbols('x1 x2 x3 x4 y1 y2 u w')
+x_vars = [x1, x2, x3, x4, y1, y2]
 
 f_eqn = [
     x2,
     -x1 + 0.1*sp.sin(x3),
     x4,
-    11*sp.tanh(u)
+    11*sp.tanh(u),
+    x2 - x1 + 0.1*sp.sin(x3),
+    x2 + x1 - 0.1*sp.sin(x3),
 ]
 # spec = (Drel - (Dsafe := (Ddefault:=10) + Tgap*vego))
 # print(spec)
@@ -26,14 +28,22 @@ f_eqn = [
 # t_spec = ContinuousTimeSpec(0.05,0.5)
 t_spec = ContinuousTimeSpec(0.05,0.5)
 # t_spec = DiscretizedTimeSpec(0.05)
-sys = System(x_vars, [u], [w], f_eqn, t_spec)
+ref = AffineRefine(
+    M = np.array([
+        [-1, -1, 0, 0, 1, 0],
+        [-1,  1, 0, 0, 0, 1],
+    ]),
+    b = np.array([ 0,0 ])
+)
+sys = System(x_vars, [u], [w], f_eqn, t_spec, ref)
 net = NeuralNetwork('models/nn_tora_relu_tanh')
 del(net.seq[-1])
 del(net.seq[-1])
 print(net.seq)
 clsys = NNCSystem(sys, net, incl_opts=
-                  NNCSystem.InclOpts('jacobian+interconnect', 
-                                     orderings=[Ordering((0,1,2,3,4,5))]))
+                  NNCSystem.InclOpts('interconnect', 
+                                     orderings=[Ordering((0,1,2,3,4,5))]),
+                  g_tuple=(x_vars,), g_eqn=[x1, x2, x3, x4])
 clsys.set_four_corners()
 t_end = 5
 
@@ -47,15 +57,17 @@ x0 = np.array([
     np.interval(-0.77,-0.75),
     np.interval(-0.45,-0.43),
     np.interval(0.51,0.54),
-    np.interval(-0.3,-0.28)
+    np.interval(-0.3,-0.28),
+    np.interval(-0.77,-0.75) + np.interval(-0.45,-0.43),
+    np.interval(-0.77,-0.75) - np.interval(-0.45,-0.43),
 ])
 xcent, xpert = get_cent_pert(x0)
 # print(net.seq[0].weight.detach().numpy() @ xcent + net.seq[0].bias.detach().numpy())
 
-# partitioner = UniformPartitioner(clsys)
-# popts = UniformPartitioner.Opts(1, 1)
-partitioner = CGPartitioner(clsys)
-popts = CGPartitioner.Opts(0.25, 0.1, 1, 1)
+partitioner = UniformPartitioner(clsys)
+popts = UniformPartitioner.Opts(0, 0)
+# partitioner = CGPartitioner(clsys)
+# popts = CGPartitioner.Opts(0.25, 0.1, 1, 1)
 
 tt = t_spec.tt(0,t_end)
 
