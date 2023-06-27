@@ -9,6 +9,7 @@ from ReachMM.reach import UniformPartitioner, CGPartitioner
 from ReachMM.control import ConstantDisturbance
 from ReachMM.utils import run_times, draw_iarray
 import matplotlib.pyplot as plt
+import torch
 
 x1, x2, x3, x4, y1, y2, u, w = sp.symbols('x1 x2 x3 x4 y1 y2 u w')
 x_vars = [x1, x2, x3, x4, y1, y2]
@@ -22,11 +23,12 @@ f_eqn = [
     x2 + x1 - 0.1*sp.sin(x3),
 ]
 # spec = (Drel - (Dsafe := (Ddefault:=10) + Tgap*vego))
+specs = [ (x1 + 0.1), (0.2 - x1), (x2 + 0.9), (-0.6 - x2) ]
 # print(spec)
-# spec_lam = sp.lambdify((x_vars,), spec, 'numpy')
+spec_lam = [sp.lambdify((x_vars,), spec, 'numpy') for spec in specs]
 
 # t_spec = ContinuousTimeSpec(0.05,0.5)
-t_spec = ContinuousTimeSpec(0.05,0.5)
+t_spec = ContinuousTimeSpec(0.005,0.5)
 # t_spec = DiscretizedTimeSpec(0.05)
 ref = AffineRefine(
     M = np.array([
@@ -39,11 +41,22 @@ sys = System(x_vars, [u], [w], f_eqn, t_spec, ref)
 net = NeuralNetwork('models/nn_tora_relu_tanh')
 del(net.seq[-1])
 del(net.seq[-1])
+g_lin = torch.nn.Linear(6,4,False)
+g_lin.weight = torch.nn.Parameter(
+    torch.tensor(np.array([
+        [1,0,0,0,0,0],
+        [0,1,0,0,0,0],
+        [0,0,1,0,0,0],
+        [0,0,0,1,0,0],
+    ]).astype(np.float32))
+)
+net.seq.insert(0, g_lin)
 print(net.seq)
 clsys = NNCSystem(sys, net, incl_opts=
-                  NNCSystem.InclOpts('interconnect', 
-                                     orderings=[Ordering((0,1,2,3,4,5))]),
-                  g_tuple=(x_vars,), g_eqn=[x1, x2, x3, x4])
+                  NNCSystem.InclOpts('jacobian+interconnect', 
+                #   NNCSystem.InclOpts('interconnect', 
+                                     orderings=[Ordering((0,1,2,3,4,5))]))
+                #   g_tuple=(x_vars,), g_eqn=[x1, x2, x3, x4])
 clsys.set_four_corners()
 t_end = 5
 
@@ -73,7 +86,8 @@ tt = t_spec.tt(0,t_end)
 
 def run () :
     rs = partitioner.compute_reachable_set(0,t_end,x0,popts)
-    safe = 'T' # safe = rs.check_safety(spec_lam, tt)
+    safe = rs.check_safety_tt(spec_lam, tt)
+    print(safe)
     return rs, safe
 (rs, safe), times = run_times(1, run)
 
@@ -90,7 +104,9 @@ tt = clsys.sys.t_spec.tt(0,t_end)
 for traj in trajs :
     plt.plot(traj(tt)[:,0], traj(tt)[:,1], color='tab:red')
 
-print(rs(tt)[:,2])
+plt.xlim([-0.1,0.2])
+plt.ylim([-0.9,-0.6])
+# print(rs(tt)[:,2])
 # fig, ax = plt.subplots(1, 1, squeeze=True)
 
 # Drel_xx  = sp.lambdify((x_vars,), Drel , 'numpy')(xx)

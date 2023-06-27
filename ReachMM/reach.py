@@ -115,6 +115,23 @@ class Partition :
                 return 'N'
         return ret
 
+    def check_safety_tt (self, specs, tt) :
+        ret = np.empty_like(tt, dtype=str)
+        # ret = np.empty_like(tt, dtype=np.interval)
+        # print(specs)
+        for i, t in enumerate(tt) :
+            res = [spec(self(t)) for spec in specs]
+            s = np.interval(np.min([r.l for r in res]), 
+                            np.max([r.u for r in res]))
+            if s.l > 0 and s.u > 0 :
+                ret[i] = 'Y'
+            if s.l < 0 and s.u > 0 :
+                ret[i] = 'U'
+            elif s.l < 0 and s.u < 0 :
+                ret[i] = 'N'
+            # ret[i] = s
+        return ret
+
     def _call_single(self, t) :
         n = self._n(t)
         if n <= self._n(self.tf) :

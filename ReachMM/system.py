@@ -86,22 +86,16 @@ class AffineRefine :
             return z
         if z.dtype != np.interval :
             raise Exception('Call refine with an interval')
-        # ret = np.copy(z)
-        print(z)
+        ret = np.copy(z)
         alpha = self.b - self.M @ z
         for j in range(self.M.shape[0]) :
             for i in range(self.M.shape[1]) :
-                if np.abs(self.M[j,i]) > 1e-5 :
+                if np.abs(self.M[j,i]) > 1e-5 and np.norm(ret[i]) > 1e-6 :
                     alphaj = self.b[j] - (self.M[j,:i]@z[:i] + self.M[j,(i+1):]@z[(i+1):])
-                    mz = self.M[j,i] * z[i]
                     zi = alphaj / self.M[j,i]
-                    # zi = np.interval(alphaj.l + mz.u, alphaj.u + mz.l) / self.M[j,i]
-                    # ret[i] = np.intersection(ret[i], zi)
-                    z[i] = np.intersection(z[i], zi)
-        print(z)
-        input()
-        # print(ret)
-        return z
+                    ret[i] = np.interval(np.median([ret[i].l, ret[i].u, zi.l]), 
+                                         np.median([ret[i].l, ret[i].u, zi.u]))
+        return ret
     
 class System :
     def __init__(self, x_vars, u_vars, w_vars, f_eqn, t_spec:TimeSpec,
@@ -188,7 +182,7 @@ class ControlledSystem :
     # Returns x_{t+1} given x_t.
     def func (self, t, x) :
         # self.control.step(t, self.sys.g(x))
-
+        print(t)
         # Monotone Inclusion
         if x.dtype == np.interval :
             if self.sys.t_spec.type == 'continuous' :
@@ -238,13 +232,16 @@ class ControlledSystem :
         if iuCALCx_ is None :
             iuCALCx_ = self.control.iuCALCx_
         for i in range(len(x)) :
-            xi = np.copy(x); 
+            xi = np.copy(x)
 
             tmpi = x[i]; tmpi.u = x[i].l; xi[i] = tmpi
+            xi = self.sys.ref(xi)
             _reti = np.interval(self.sys.f_i[i] (xi, iuCALC_x[i,:], self.dist.w(0,xi))[0])
             d_x[i] = _reti.l #if _reti.dtype == np.interval else _reti
 
+            xi = np.copy(x)
             tmpi = x[i]; tmpi.l = x[i].u; xi[i] = tmpi
+            xi = self.sys.ref(xi)
             ret_i = np.interval(self.sys.f_i[i] (xi, iuCALCx_[i,:], self.dist.w(0,xi))[0])
             dx_[i] = ret_i.u #if ret_i.dtype == np.interval else ret_i
         return d_x, dx_
