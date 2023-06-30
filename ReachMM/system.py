@@ -231,18 +231,21 @@ class ControlledSystem :
             iuCALC_x = self.control.iuCALC_x
         if iuCALCx_ is None :
             iuCALCx_ = self.control.iuCALCx_
+        
         for i in range(len(x)) :
+            _ui = iuCALC_x[i,:] if self.control.mode != 'global' else self.control.iuCALC
+            ui_ = iuCALCx_[i,:] if self.control.mode != 'global' else self.control.iuCALC
             xi = np.copy(x)
 
             tmpi = x[i]; tmpi.u = x[i].l; xi[i] = tmpi
             xi = self.sys.ref(xi)
-            _reti = np.interval(self.sys.f_i[i] (xi, iuCALC_x[i,:], self.dist.w(0,xi))[0])
+            _reti = np.interval(self.sys.f_i[i] (xi, _ui, self.dist.w(0,xi))[0])
             d_x[i] = _reti.l #if _reti.dtype == np.interval else _reti
 
             xi = np.copy(x)
             tmpi = x[i]; tmpi.l = x[i].u; xi[i] = tmpi
             xi = self.sys.ref(xi)
-            ret_i = np.interval(self.sys.f_i[i] (xi, iuCALCx_[i,:], self.dist.w(0,xi))[0])
+            ret_i = np.interval(self.sys.f_i[i] (xi, ui_, self.dist.w(0,xi))[0])
             dx_[i] = ret_i.u #if ret_i.dtype == np.interval else ret_i
         return d_x, dx_
 

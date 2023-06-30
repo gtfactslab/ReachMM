@@ -47,7 +47,7 @@ spec_lam = sp.lambdify((x_vars,), spec, 'numpy')
 t_spec = ContinuousTimeSpec(0.01,0.1)
 sys = System(x_vars, [aego], [alead], f_eqn, t_spec)
 net = NeuralNetwork('models/controller_5_20')
-clsys = NNCSystem(sys, net, 'interconnect', 
+clsys = NNCSystem(sys, net, NNCSystem.InclOpts('interconnect'), 
                   dist=ConstantDisturbance([-2],[np.interval(-2,-2)]),
                   g_tuple=(x_vars,), g_eqn=g_eqn)
 t_end = 5
@@ -96,6 +96,6 @@ ax.fill_between(tt, Dsafe_l, Dsafe_u, color='tab:red', alpha=0.25)
 ax.set_xlabel('Time (s)',labelpad=0.1)
 ax.set_ylabel('Distance (m)',labelpad=0.1)
 
-fig.savefig('figures/acc.pdf')
+fig.savefig('figures/acc_tac2023.pdf')
 
 plt.show()

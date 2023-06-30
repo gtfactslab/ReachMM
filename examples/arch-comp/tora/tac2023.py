@@ -9,6 +9,7 @@ from ReachMM.reach import UniformPartitioner, CGPartitioner
 from ReachMM.control import ConstantDisturbance
 from ReachMM.utils import run_times, draw_iarray
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 import torch
 
 x1, x2, x3, x4, y1, y2, u, w = sp.symbols('x1 x2 x3 x4 y1 y2 u w')
@@ -22,14 +23,10 @@ f_eqn = [
     x2 - x1 + 0.1*sp.sin(x3),
     x2 + x1 - 0.1*sp.sin(x3),
 ]
-# spec = (Drel - (Dsafe := (Ddefault:=10) + Tgap*vego))
 specs = [ (x1 + 0.1), (0.2 - x1), (x2 + 0.9), (-0.6 - x2) ]
-# print(spec)
 spec_lam = [sp.lambdify((x_vars,), spec, 'numpy') for spec in specs]
 
-# t_spec = ContinuousTimeSpec(0.05,0.5)
 t_spec = ContinuousTimeSpec(0.005,0.5)
-# t_spec = DiscretizedTimeSpec(0.05)
 ref = AffineRefine(
     M = np.array([
         [-1, -1, 0, 0, 1, 0],
@@ -39,6 +36,7 @@ ref = AffineRefine(
 )
 sys = System(x_vars, [u], [w], f_eqn, t_spec, ref)
 net = NeuralNetwork('models/nn_tora_relu_tanh')
+# Remove final tanh and offset layer.
 del(net.seq[-1])
 del(net.seq[-1])
 g_lin = torch.nn.Linear(6,4,False)
@@ -52,20 +50,11 @@ g_lin.weight = torch.nn.Parameter(
 )
 net.seq.insert(0, g_lin)
 print(net.seq)
-clsys = NNCSystem(sys, net, incl_opts=
-                  NNCSystem.InclOpts('jacobian+interconnect', 
-                #   NNCSystem.InclOpts('interconnect', 
-                                     orderings=[Ordering((0,1,2,3,4,5))]))
-                #   g_tuple=(x_vars,), g_eqn=[x1, x2, x3, x4])
+clsys = NNCSystem(sys, net, incl_opts=NNCSystem.InclOpts('jacobian+interconnect'))
+clsys.set_standard_ordering()
 clsys.set_four_corners()
 t_end = 5
 
-# x0 = np.array([
-#     np.interval(0.6,0.7),
-#     np.interval(-0.7,-0.6),
-#     np.interval(-0.4,-0.3),
-#     np.interval(0.5,0.6)
-# ])
 x0 = np.array([
     np.interval(-0.77,-0.75),
     np.interval(-0.45,-0.43),
@@ -75,12 +64,9 @@ x0 = np.array([
     np.interval(-0.77,-0.75) - np.interval(-0.45,-0.43),
 ])
 xcent, xpert = get_cent_pert(x0)
-# print(net.seq[0].weight.detach().numpy() @ xcent + net.seq[0].bias.detach().numpy())
 
 partitioner = UniformPartitioner(clsys)
 popts = UniformPartitioner.Opts(0, 0)
-# partitioner = CGPartitioner(clsys)
-# popts = CGPartitioner.Opts(0.25, 0.1, 1, 1)
 
 tt = t_spec.tt(0,t_end)
 
@@ -93,32 +79,31 @@ def run () :
 
 print(f'Safe: {safe} in {np.mean(times)} \\pm {np.std(times)} (s)')
 
+fig, axs = plt.subplots(1,2,figsize=[16,8],dpi=100,squeeze=False)
+fig.subplots_adjust(left=0.075, right=0.95, bottom=0.075, top=0.925, wspace=0.125, hspace=0.25)
+
+axs[0,0].add_patch(Rectangle((-0.1,-0.9), 0.3, 0.3, color='tab:green', alpha=0.5))
+axs[0,1].add_patch(Rectangle((-0.1,-0.9), 0.3, 0.3, color='tab:green', alpha=0.5))
+
 xx = rs(tt)
 print(rs(t_end))
-rs.draw_rs(plt, tt)
+rs.draw_rs(axs[0,0], tt[::10])
+rs.draw_rs(axs[0,1], tt)
 
-# clsys.sys.t_spec = ContinuousTimeSpec(0.01,0.5)
 trajs = clsys.compute_mc_trajectories(0,t_end,x0,100)
-# print(traj(t_end))
 tt = clsys.sys.t_spec.tt(0,t_end)
 for traj in trajs :
-    plt.plot(traj(tt)[:,0], traj(tt)[:,1], color='tab:red')
+    for ax in axs.reshape(-1) :
+        ax.plot(traj(tt)[:,0], traj(tt)[:,1], color='tab:red')
+        ax.set_xlabel(f'$x_1$')
+        ax.set_ylabel(f'$x_2$')
 
-plt.xlim([-0.1,0.2])
-plt.ylim([-0.9,-0.6])
-# print(rs(tt)[:,2])
-# fig, ax = plt.subplots(1, 1, squeeze=True)
+axs[0,1].set_xlim([-0.1,0.2])
+axs[0,1].set_ylim([-0.9,-0.6])
 
-# Drel_xx  = sp.lambdify((x_vars,), Drel , 'numpy')(xx)
-# Drel_l, Drel_u = get_lu(Drel_xx)
-# Dsafe_xx = sp.lambdify((x_vars,), Dsafe, 'numpy')(xx)
-# Dsafe_l, Dsafe_u = get_lu(Dsafe_xx)
+# ax.set_xlabel(f'$x_1$')
+# ax.set_ylabel(f'$x_2$')
 
-# pltl = ax.plot(tt, Drel_l, color='tab:blue')
-# pltu = ax.plot(tt, Drel_u, color='tab:blue')
-# ax.fill_between(tt, Drel_l, Drel_u, color='tab:blue', alpha=0.25)
-# pltl = ax.plot(tt, Dsafe_l, color='tab:red')
-# pltu = ax.plot(tt, Dsafe_u, color='tab:red')
-# ax.fill_between(tt, Dsafe_l, Dsafe_u, color='tab:red', alpha=0.25)
+fig.savefig('figures/tora_tac2023.pdf')
 plt.show()
 

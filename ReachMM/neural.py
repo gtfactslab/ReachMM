@@ -135,9 +135,9 @@ class NeuralNetworkControl (Control) :
         x_L = torch.tensor(_x.reshape(1,-1), dtype=torch.float32)
         x_U = torch.tensor(x_.reshape(1,-1), dtype=torch.float32)
         ptb = PerturbationLpNorm(norm=np.inf, x_L=x_L, x_U=x_U)
-        input = BoundedTensor(self.global_input, ptb)
+        bt_input = BoundedTensor(self.global_input, ptb)
         self.u_lb, self.u_ub, A_dict = \
-            self.bnn.compute_bounds(x=(input,), method=self.method, return_A=True, needed_A_dict=self.required_A)
+            self.bnn.compute_bounds(x=(bt_input,), method=self.method, return_A=True, needed_A_dict=self.required_A)
         self.u_lb = self.u_lb.cpu().detach().numpy()
         self.u_ub = self.u_ub.cpu().detach().numpy()
 
@@ -153,6 +153,8 @@ class NeuralNetworkControl (Control) :
         # print('C_', self.C_)
         # print('_d', self._d)
         # print('d_', self.d_)
+        # input()
+
     
     def __str__(self) -> str:
         return f'{str(self.nn)}, {self.mode} mode'

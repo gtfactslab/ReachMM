@@ -77,16 +77,16 @@ def platoon (N, show_plot, runtime_N, rset=0.5, kp=5, kv=5, u_lim=5.0) :
     # print(sys.Df_u_sym)
 
     net = NeuralNetwork('models/100r100r2')
-    # net.seq.insert(0,nn.Linear(len(x_vars), 4))
-    # W = torch.zeros((4,len(x_vars)))
-    # W[0,0] = 1; W[1,1] = 1; W[2,2] = 1; W[3,3] = 1
-    # net.seq[0].weight = nn.Parameter(W)
+    net.seq.insert(0,nn.Linear(len(x_vars), 4, False))
+    W = torch.zeros((4,len(x_vars)))
+    W[0,0] = 1; W[1,1] = 1; W[2,2] = 1; W[3,3] = 1
+    net.seq[0].weight = nn.Parameter(W)
 
     dist = UniformDisturbance([np.interval(-0.001,0.001) for w in w_vars])
-    clsys = NNCSystem(sys, net, NNCSystem.InclOpts('interconnect'), dist=dist,
-                      g_tuple=(x_vars,), g_eqn=list(x[0]))
-    # clsys.set_standard_ordering()
-    # clsys.set_four_corners()
+    clsys = NNCSystem(sys, net, NNCSystem.InclOpts('jacobian'), dist=dist)
+                    #   g_tuple=(x_vars,), g_eqn=list(x[0]))
+    clsys.set_standard_ordering()
+    clsys.set_four_corners()
     t_end = 1.5
     print(clsys)
     partitioner = UniformPartitioner(clsys)
@@ -163,7 +163,7 @@ def platoon (N, show_plot, runtime_N, rset=0.5, kp=5, kv=5, u_lim=5.0) :
         ax.add_patch(Circle((4,4),3/1.33,lw=0,fc='salmon',zorder=0))
         for i in range(N) :
             if i == axi :
-                rs.draw_rs(ax,tt,4*i,4*i+1,fc='tab:blue',ec='none',alpha=1)
+                rs.draw_rs(ax,tt,4*i,4*i+1,fc=colors[i],ec='none',alpha=1)
                 ax.add_patch(Circle((x0cent[4*i], x0cent[4*i + 1]), 0.25, lw=0, fc=colors[i]))
             else :
                 ax.add_patch(Circle((x0cent[4*i], x0cent[4*i + 1]), 0.15, alpha=0.25, lw=0, fc='grey'))

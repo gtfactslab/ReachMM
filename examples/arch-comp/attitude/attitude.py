@@ -71,8 +71,7 @@ g_lin.weight = torch.nn.Parameter(
 )
 net.seq.insert(0, g_lin)
 clsys = NNCSystem(sys, net, 
-                  incl_opts=NNCSystem.InclOpts('jacobian+interconnect',
-                                               orderings=standard_ordering(12)))
+                  incl_opts=NNCSystem.InclOpts('jacobian+interconnect'))
 clsys.set_standard_ordering()
 clsys.set_four_corners()
 t_end = 3
