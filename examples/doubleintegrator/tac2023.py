@@ -36,7 +36,7 @@ t_spec = DiscreteTimeSpec()
 t_end = 5; tt = t_spec.tt(0,t_end)
 sys = System([x1, x2], [u], [w], f_eqn, t_spec)
 net = NeuralNetwork('models/10r5r1')
-clsys = NNCSystem(sys, net, 'jacobian')
+clsys = NNCSystem(sys, net, NNCSystem.InclOpts('jacobian'))
 print(clsys)
 
 # partitioner = UniformPartitioner(clsys)

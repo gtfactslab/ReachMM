@@ -16,7 +16,7 @@ import matplotlib.colors as mcolors
 from inspect import getsource
 
 
-def platoon (N, show_plot, runtime_N, rset=0.5, kp=5, kv=5, u_lim=5.0) :
+def platoon (N, show_plot, runtime_N, mode, rset=0.5, kp=5, kv=5, u_lim=5.0) :
     x_vars = []
     u_vars = []
     w_vars = []
@@ -77,16 +77,20 @@ def platoon (N, show_plot, runtime_N, rset=0.5, kp=5, kv=5, u_lim=5.0) :
     # print(sys.Df_u_sym)
 
     net = NeuralNetwork('models/100r100r2')
-    net.seq.insert(0,nn.Linear(len(x_vars), 4, False))
-    W = torch.zeros((4,len(x_vars)))
-    W[0,0] = 1; W[1,1] = 1; W[2,2] = 1; W[3,3] = 1
-    net.seq[0].weight = nn.Parameter(W)
+    if mode == 'jacobian' :
+        net.seq.insert(0,nn.Linear(len(x_vars), 4, False))
+        W = torch.zeros((4,len(x_vars)))
+        W[0,0] = 1; W[1,1] = 1; W[2,2] = 1; W[3,3] = 1
+        net.seq[0].weight = nn.Parameter(W)
 
-    dist = UniformDisturbance([np.interval(-0.001,0.001) for w in w_vars])
-    clsys = NNCSystem(sys, net, NNCSystem.InclOpts('jacobian'), dist=dist)
-                    #   g_tuple=(x_vars,), g_eqn=list(x[0]))
-    clsys.set_standard_ordering()
-    clsys.set_four_corners()
+        dist = UniformDisturbance([np.interval(-0.001,0.001) for w in w_vars])
+        clsys = NNCSystem(sys, net, NNCSystem.InclOpts(mode), dist=dist)
+        clsys.set_standard_ordering()
+        clsys.set_four_corners()
+    elif mode == 'interconnect' : 
+        dist = UniformDisturbance([np.interval(-0.001,0.001) for w in w_vars])
+        clsys = NNCSystem(sys, net, NNCSystem.InclOpts(mode), dist=dist,
+                          g_tuple=(x_vars,), g_eqn=list(x[0]))
     t_end = 1.5
     print(clsys)
     partitioner = UniformPartitioner(clsys)
@@ -174,9 +178,9 @@ def platoon (N, show_plot, runtime_N, rset=0.5, kp=5, kv=5, u_lim=5.0) :
         # ax.set_xticks([0,2,4,6,8,10])
         # ax.set_yticks([0,2,4,6,8,10])
 
-    fig1.savefig('figures/platooning_fig1.pdf')
-    fig2.savefig('figures/platooning_fig2.pdf')
-    fig3.savefig('figures/platooning_fig3.pdf')
+    fig1.savefig(f'figures/{mode[:3]}_platooning_fig1.pdf')
+    fig2.savefig(f'figures/{mode[:3]}_platooning_fig2.pdf')
+    fig3.savefig(f'figures/{mode[:3]}_platooning_fig3.pdf')
     plt.show()
     return runtimes
 
@@ -185,15 +189,17 @@ if __name__ == '__main__' :
     parser = argparse.ArgumentParser(description="Platooning Experiments")
     parser.add_argument('-N', '--runtime_N', help="Number of calls for time averaging",
                         type=int, default=1)
+    parser.add_argument('--mode', help="Inclusion mode",
+                        type=str, default='interconnect')
     args = parser.parse_args()
 
     from tabulate import tabulate
 
     table = [['$N$ (units)', 'States', 'Runtime (s)']]
     for N in [1,4,9,20,50] :
-        runtimes = platoon(N, False, args.runtime_N)
+        runtimes = platoon(N, False, args.runtime_N, args.mode)
         table.append([N, 4*N, rf'${np.mean(runtimes)} \pm {np.std(runtimes)}$'])
 
     print(tabulate(table,tablefmt="latex_raw"))
 
-    platoon(9, True, 1)
+    platoon(9, True, 1, args.mode)

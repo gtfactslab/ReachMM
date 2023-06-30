@@ -1,3 +1,9 @@
+import argparse
+parser = argparse.ArgumentParser(description="Vehicle (bicycle model) Experiments for L4DC 2023 Paper")
+parser.add_argument('-N', '--runtime_N', help="Number of calls for time averaging",\
+                    type=int, default=1)
+args = parser.parse_args()
+
 import numpy as np
 import interval
 from interval import from_cent_pert, get_lu, get_cent_pert
@@ -38,7 +44,7 @@ clsys = NNCSystem(sys, net, NNCSystem.InclOpts('interconnect'))
 print(clsys)
 t_end = 40
 
-def run_and_plot (ax, x0) :
+def run_and_plot (ax, x0, ind) :
     xcent, xpert = get_cent_pert(x0)
 
     partitioner = UniformPartitioner(clsys)
@@ -50,7 +56,7 @@ def run_and_plot (ax, x0) :
         rs = partitioner.compute_reachable_set(0,t_end,x0,popts)
         safe = rs.check_safety(spec_lam, tt)
         return rs, safe
-    (rs, safe), times = run_times(1, run)
+    (rs, safe), times = run_times(args.runtime_N, run)
 
     print(f'Safe: {safe} in {np.mean(times)} \\pm {np.std(times)} (s)')
 
@@ -60,7 +66,7 @@ def run_and_plot (ax, x0) :
     plot_iarray_t(ax, tt, np.array([spec2_lam(rs(t)) for t in tt]), color='tab:blue')
 
     # ax.plot(tt,np.zeros_like(tt), color='tab:red')
-    title = f'$\\mathcal{{X}}_0 = {x0}$'.replace(') ', '\\times').replace('(','').replace('[[','[').replace(')]','')
+    title = f'$\\mathcal{{X}}_0^{ind} = {x0}$'.replace(') ', '\\times').replace('(','').replace('[[','[').replace(')]','')
     ax.set_title(title)
 
     ax.set_xlabel('Time (s)')
@@ -77,7 +83,7 @@ run_and_plot(axs[0,0], np.array([
     np.interval(102,106),
     np.interval(-0.28,-0.24),
     np.interval(-0.28,-0.24)
-]))
+]), 0)
 
 # (0,1)
 run_and_plot(axs[0,1], np.array([
@@ -85,7 +91,7 @@ run_and_plot(axs[0,1], np.array([
     np.interval(102,106),
     np.interval(0.24,0.28),
     np.interval(0.24,0.28)
-]))
+]), 1)
 
 # (1,0)
 run_and_plot(axs[1,0], np.array([
@@ -93,7 +99,7 @@ run_and_plot(axs[1,0], np.array([
     np.interval(70,74),
     np.interval(-0.28,-0.24),
     np.interval(-0.28,-0.24)
-]))
+]), 2)
 
 # (1,1)
 run_and_plot(axs[1,1], np.array([
@@ -101,7 +107,7 @@ run_and_plot(axs[1,1], np.array([
     np.interval(70,74),
     np.interval(0.24,0.28),
     np.interval(0.24,0.28)
-]))
+]), 3)
 
 fig.savefig('figures/docking_tac2023.pdf')
 plt.show()

@@ -45,7 +45,9 @@ t_spec = ContinuousTimeSpec(0.025,0.1)
 sys = System(x_vars, u_vars, [w_dist], f_eqn, t_spec)
 print(sys)
 net = NeuralNetwork('models/quad_controller_3_64')
-clsys = NNCSystem(sys, net, 'jacobian')
+clsys = NNCSystem(sys, net, NNCSystem.InclOpts('jacobian'))
+clsys.set_standard_ordering()
+clsys.set_four_corners()
 t_end = 1
 
 # print(getsource(sys.f_i[11]))
@@ -68,7 +70,7 @@ xcent, xpert = get_cent_pert(x0)
 # print(net.seq[0].weight.detach().numpy() @ xcent + net.seq[0].bias.detach().numpy())
 
 partitioner = UniformPartitioner(clsys)
-popts = UniformPartitioner.Opts(0, 0)
+popts = UniformPartitioner.Opts(0,0)
 # partitioner = CGPartitioner(clsys)
 # popts = CGPartitioner.Opts(0.05, 0.2, 2, 0)
 

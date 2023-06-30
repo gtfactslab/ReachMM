@@ -107,6 +107,7 @@ run_and_plot(axs[0,2], f'Mixed-States Cornered Jacobian: $\\mathsf{{F}}^\\mathrm
 # Mixed States and Control Cornered Mode
 clsys.incl_opts = NNCSystem.InclOpts('jacobian', orderings=[Ordering((0,1,2,3,4,5))])
 clsys.set_two_corners()
+clsys.set_standard_ordering()
 run_and_plot(axs[1,2], f'Mixed-All Cornered Jacobian: $\\mathsf{{F}}^\\mathrm{{jac}}$')
 
 
