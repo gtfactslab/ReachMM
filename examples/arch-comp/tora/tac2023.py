@@ -1,3 +1,9 @@
+import argparse
+parser = argparse.ArgumentParser(description="Vehicle (bicycle model) Experiments for L4DC 2023 Paper")
+parser.add_argument('-N', '--runtime_N', help="Number of calls for time averaging",\
+                    type=int, default=1)
+args = parser.parse_args()
+
 import numpy as np
 import interval
 from interval import from_cent_pert, get_lu, get_cent_pert
@@ -73,9 +79,8 @@ tt = t_spec.tt(0,t_end)
 def run () :
     rs = partitioner.compute_reachable_set(0,t_end,x0,popts)
     safe = rs.check_safety_tt(spec_lam, tt)
-    print(safe)
     return rs, safe
-(rs, safe), times = run_times(1, run)
+(rs, safe), times = run_times(args.runtime_N, run)
 
 print(f'Safe: {safe} in {np.mean(times)} \\pm {np.std(times)} (s)')
 
