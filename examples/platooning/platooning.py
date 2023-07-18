@@ -190,7 +190,8 @@ if __name__ == '__main__' :
     from tabulate import tabulate
 
     table = [['$N$ (units)', 'States', 'Runtime (s)']]
-    for N in [1,4,9,20,50] :
+    # for N in [1,4,9,20,50] :
+    for N in [9] :
         runtimes = platoon(N, False, args.runtime_N)
         table.append([N, 4*N, rf'${np.mean(runtimes)} \pm {np.std(runtimes)}$'])
 

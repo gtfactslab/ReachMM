@@ -45,7 +45,7 @@ t_spec = ContinuousTimeSpec(0.025,0.1)
 sys = System(x_vars, u_vars, [w_dist], f_eqn, t_spec)
 print(sys)
 net = NeuralNetwork('models/quad_controller_3_64')
-clsys = NNCSystem(sys, net, 'jacobian')
+clsys = NNCSystem(sys, net, NNCSystem.InclOpts('jacobian+interconnect'))
 t_end = 1
 
 # print(getsource(sys.f_i[11]))
