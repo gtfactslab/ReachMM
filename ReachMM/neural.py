@@ -87,7 +87,9 @@ class NeuralNetworkControl (Control) :
         self.x_len = nn[0].in_features if x_len is None else x_len
         self.global_input = torch.zeros([1,self.x_len], dtype=torch.float32)
         self.nn = nn
-        self.bnn = BoundedModule(nn, self.global_input, bound_opts, device, verbose, custom_ops)
+        self.bnn = BoundedModule(nn, self.global_input, bound_opts, 
+                                 device, verbose, 
+                                 custom_ops={'relu': 'same-slope'})
         # self.global_input = global_input
         self.method = method
         self.device = device
@@ -136,6 +138,7 @@ class NeuralNetworkControl (Control) :
         x_U = torch.tensor(x_.reshape(1,-1), dtype=torch.float32)
         ptb = PerturbationLpNorm(norm=np.inf, x_L=x_L, x_U=x_U)
         bt_input = BoundedTensor(self.global_input, ptb)
+        # self.bnn.set_bound_opts({'optimize_bound_args': {'iteration': 0, 'lr_alpha': 0.1, }})
         self.u_lb, self.u_ub, A_dict = \
             self.bnn.compute_bounds(x=(bt_input,), method=self.method, return_A=True, needed_A_dict=self.required_A)
         self.u_lb = self.u_lb.cpu().detach().numpy()
@@ -149,11 +152,13 @@ class NeuralNetworkControl (Control) :
         self._d = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['lbias'].cpu().detach().numpy().reshape(-1)
         self.d_ = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['ubias'].cpu().detach().numpy().reshape(-1)
         self.d = get_iarray(self._d, self.d_)
-        # print('\n_C', self._C)
-        # print('C_', self.C_)
-        # print('_d', self._d)
-        # print('d_', self.d_)
-        # input()
+        if np.any(np.abs(self._C - self.C_) > 1e-5):
+        # if True:
+            print('\n_C', self._C)
+            print('C_', self.C_)
+            print('_d', self._d)
+            print('d_', self.d_)
+            input()
 
     
     def __str__(self) -> str:
