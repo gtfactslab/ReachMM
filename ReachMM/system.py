@@ -3,7 +3,7 @@ from typing import NamedTuple, List
 import numpy as np
 import sympy as sp
 import interval
-from interval import get_lu, get_iarray, has_nan
+from interval import get_lu, get_iarray, has_nan, get_cent_pert
 from inclusion import Corner, Ordering, two_orderings, two_corners, standard_ordering
 from ReachMM.time import *
 from ReachMM.neural import NeuralNetwork, NeuralNetworkControl
@@ -321,7 +321,33 @@ class NNCSystem (ControlledSystem) :
                 if method == 'jacobian' :
                     if self.sys.t_spec.type == 'continuous' :
                         if self.sys.type == 'nonlinear' :
-                            ret.append(np.intersection(self._nl_jac_cont(t, x), self.sys.x_clip))
+                            _x, x_ = get_lu(x)
+                            d_x, dx_ = np.empty_like(x,np.float32), np.empty_like(x,np.float32)
+
+                            for i in range(len(x)) :
+                                _ui = self.control.iuCALC_x[i,:] if self.control.mode != 'global' else self.control.iuCALC
+                                ui_ = self.control.iuCALCx_[i,:] if self.control.mode != 'global' else self.control.iuCALC
+                                xi = np.copy(x)
+
+                                tmpi = x[i]; tmpi.u = x[i].l; xi[i] = tmpi
+                                xi = self.sys.ref(xi)
+                                _reti, _ = self._nl_jac_cont(t, xi, _ui)
+                                d_x[i] = _reti[i] #if _reti.dtype == np.interval else _reti
+
+                                xi = np.copy(x)
+                                tmpi = x[i]; tmpi.l = x[i].u; xi[i] = tmpi
+                                xi = self.sys.ref(xi)
+                                _, ret_i = self._nl_jac_cont(t, xi, ui_)
+                                dx_[i] = ret_i[i] #if ret_i.dtype == np.interval else ret_i
+                            
+                            # print('first: ', d_x, dx_)
+                            # print('second: ', self._nl_jac_cont(t, x, self.uj))
+
+                            _xtp1 = _x + self.sys.t_spec.t_step * d_x
+                            x_tp1 = x_ + self.sys.t_spec.t_step * dx_
+                            ret.append(np.intersection(get_iarray(_xtp1, x_tp1), self.sys.x_clip))
+                            # ret.append(np.intersection(self._nl_jac_cont(t, x), self.sys.x_clip))
+
                         elif self.sys.type == 'linear' :
                             ret.append(np.intersection(self._l_jac_cont(t, x), self.sys.x_clip))
                             # return self._nl_jac_cont(t, x)
@@ -356,10 +382,11 @@ class NNCSystem (ControlledSystem) :
             \rcontrolled by {self.control.__str__()}
             \rusing the {self.incl_method} monotone inclusion function'''
 
-    def _nl_jac_cont (self, t, x) :
+    def _nl_jac_cont (self, t, x, u) :
         w = self.dist.w(t, x)
         _x, x_ = get_lu(x)
-        _u, u_ = get_lu(self.uj)
+        # _u, u_ = get_lu(self.uj)
+        _u, u_ = get_lu(u)
         _w, w_ = get_lu(w)
 
         n = self.sys.xlen
@@ -426,7 +453,7 @@ class NNCSystem (ControlledSystem) :
                     _c = - _Kn@_e - _Kp@e_
                     c_ = - K_n@e_ - K_p@_e
                     self.control.step(0, x)
-                    self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.uj, w)[0].reshape(-1)
+                    # self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.uj, w)[0].reshape(-1)
 
                     _d.append(_Hp@_x + _Hn@x_ - _Jx@xc - _Ju@uc + _Bp@self.control._d + _Bn@self.control.d_
                             + _Dp@_w - _Dp@w_ + fc + _c)
@@ -462,7 +489,7 @@ class NNCSystem (ControlledSystem) :
                 _c = - _Kn@_e - _Kp@e_
                 c_ = - K_n@e_ - K_p@_e
                 self.control.step(0, x)
-                self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.uj, w)[0].reshape(-1)
+                # self.e = self.e + self.sys.t_spec.t_step * self.sys.f(x, self.uj, w)[0].reshape(-1)
 
                 _d.append(_Hp@_x + _Hn@x_ - _Jx@xc - _Ju@uc + _Bp@self.control._d + _Bn@self.control.d_
                           + _Dp@_w - _Dp@w_ + fc + _c)
@@ -473,7 +500,8 @@ class NNCSystem (ControlledSystem) :
 
         _xtp1 = _x + self.sys.t_spec.t_step * np.max(_d, axis=0)
         x_tp1 = x_ + self.sys.t_spec.t_step * np.min(d_, axis=0)
-        return get_iarray(_xtp1, x_tp1)
+        # return get_iarray(_xtp1, x_tp1)
+        return np.max(_d, axis=0), np.min(d_, axis=0)
     
     def _nl_jac_disc (self, t, x) :
         _x, x_ = get_lu(x)
@@ -509,6 +537,40 @@ class NNCSystem (ControlledSystem) :
                     # print(self.control.iuCALC)                    # print(self.control.iuCALC)
                     # print('f: ', self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0])
                     # print('f: ', self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0])
+    
+    def _nl_cent_cont (self, t, x) :
+        w = self.dist.w(t, x)
+        _x, x_ = get_lu(x)
+        _u, u_ = get_lu(self.uj)
+        _w, w_ = get_lu(w)
+
+        xc, xp = get_cent_pert(x)
+        uc, up = get_cent_pert(self.uj)
+        wc, wp = get_cent_pert(w)
+
+        n = self.sys.xlen
+        p = self.sys.ulen
+        q = self.sys.wlen
+
+        _d = []; d_ = []
+
+        _e, e_ = get_lu(self.e)
+        if self.incl_opts.orderings :
+            pass
+        else :
+            A, B, D = self.sys.get_ABD(x, self.uj, w)
+            # _A, A_ = get_lu(A); _B, B_ = get_lu(B); _D, D_ = get_lu(D)
+            d_x, dx_ = np.empty_like(x,np.float32), np.empty_like(x,np.float32)
+
+            def f_i (i, xi) :
+                xic, xip = get_cent_pert(xi)
+                uic = self.control.u(0, xic)
+                fc = self.sys.f(xic, uic, wc)[0].reshape(-1)
+
+                return (A + B@self.control.C)@x + B@(self.control.d - uc) - A@xc + D@w + fc
+            
+            return d_x, dx_
+
     def _l_jac_cont (self, t, x) :
         _x, x_ = get_lu(x)
         _L = self.sys.A + self.sys.Bp@self.control._C + self.sys.Bn@self.control.C_
