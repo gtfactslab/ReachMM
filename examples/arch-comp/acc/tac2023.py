@@ -44,7 +44,7 @@ spec = (Drel - (Dsafe := (Ddefault:=10) + Tgap*vego))
 print(spec)
 spec_lam = sp.lambdify((x_vars,), spec, 'numpy')
 
-t_spec = ContinuousTimeSpec(0.01,0.1)
+t_spec = ContinuousTimeSpec(0.025,0.1)
 sys = System(x_vars, [aego], [alead], f_eqn, t_spec)
 net = NeuralNetwork('models/controller_5_20')
 clsys = NNCSystem(sys, net, NNCSystem.InclOpts('interconnect'), 

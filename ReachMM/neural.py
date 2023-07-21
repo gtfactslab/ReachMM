@@ -152,8 +152,9 @@ class NeuralNetworkControl (Control) :
         self._d = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['lbias'].cpu().detach().numpy().reshape(-1)
         self.d_ = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['ubias'].cpu().detach().numpy().reshape(-1)
         self.d = get_iarray(self._d, self.d_)
-        if np.any(np.abs(self._C - self.C_) > 1e-5):
+        # if np.any(np.abs(self._C - self.C_) > 1e-5):
         # if True:
+        if False:
             print('\n_C', self._C)
             print('C_', self.C_)
             print('_d', self._d)
