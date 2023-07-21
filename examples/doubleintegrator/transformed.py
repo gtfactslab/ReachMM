@@ -34,24 +34,42 @@ B = np.array([[0],[1]])
 # ]
 net = NeuralNetwork('models/10r5r1')
 
-K = (torch.autograd.functional.jacobian(net,torch.zeros(2))).cpu().detach().numpy()
-T = A + B@K
-print(K)
+# K = np.array([[-0.24977, -0.69873]])
+# K = np.array([[-0.48963, -0.96968]])
+# K = np.array([[-0.638  0.43499]])
+K = np.array([[-0.40741, -0.90137]])
 
-T = np.array([[1,2],[1,0]])
+# K = (torch.autograd.functional.jacobian(net,torch.zeros(2))).cpu().detach().numpy()
+Acl = A + B@K
+# print(Acl)
+# print(K)
+L, U = np.linalg.eig(Acl)
+print(L)
+print(U)
+
+T = np.array([-np.real(U[:,0]),np.imag(U[:,0])]).T
+# T = np.array([[1,2],[1,0]])
 Tinv = np.linalg.inv(T)
+temp = T
+T = Tinv
+Tinv = temp
+print('T: ')
+print(T)
+print('Tinv: ')
 print(Tinv)
 
-# net.seq.insert(0, torch.nn.Linear(2,2,False))
+net.seq.insert(0, torch.nn.Linear(2,2,False))
 # net.seq.append(torch.nn.Linear(2,2,False))
-# net[0].weight = torch.nn.Parameter(torch.tensor(Tinv.astype(np.float32)))
+net[0].weight = torch.nn.Parameter(torch.tensor(Tinv.astype(np.float32)))
 # net[-1].weight = torch.nn.Parameter(torch.tensor(T))
 
-A = T@(A+B@K)@np.linalg.inv(T)
+A = T@(Acl)@Tinv
+print('A transformed: ')
+print(A)
 B = T@B
-# f_eqn = sp.Matrix(A)@sp.Matrix([x1,x2]) + sp.Matrix(B)@sp.Matrix([u])
+f_eqn = sp.Matrix(A)@sp.Matrix([x1,x2]) + sp.Matrix(B)@sp.Matrix([u])
 # f_eqn = sp.Matrix(A)@sp.Matrix([x1,x2]) + sp.Matrix(B)@sp.Matrix(K)@sp.Matrix([x1,x2])
-f_eqn = sp.Matrix(A)@sp.Matrix([x1,x2])
+# f_eqn = sp.Matrix(A)@sp.Matrix([x1,x2])
 print(f_eqn)
 
 # t_spec = DiscreteTimeSpec()
@@ -68,8 +86,8 @@ part_opts = UniformPartitioner.Opts(0,0)
 #     np.interval(-0.25,0.25)
 # ])
 x0 = np.array([
-    np.interval(-0.01,0.01),
-    np.interval(-0.01,0.01)
+    np.interval(-0.1,0.1),
+    np.interval(-0.1,0.1)
 ])
 print(net.seq[0].bias)
 print(x0)

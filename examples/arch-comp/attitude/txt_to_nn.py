@@ -43,6 +43,7 @@ for model_dir in model_dirs :
                 for j in range(W.shape[1]) :
                     W[i,j] = float(txt_read[idx])
                     idx += 1
+            for i in range(b.shape[0]) :
                 b[i] = float(txt_read[idx])
                 idx += 1
             layer.weight = nn.Parameter(W)

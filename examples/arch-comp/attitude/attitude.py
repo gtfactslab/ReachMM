@@ -74,7 +74,7 @@ clsys = NNCSystem(sys, net,
                   incl_opts=NNCSystem.InclOpts('jacobian+interconnect'))
 clsys.set_standard_ordering()
 clsys.set_four_corners()
-t_end = 3
+t_end = 1.5
 
 print(getsource(sys.Df_x))
 
