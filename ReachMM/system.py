@@ -182,7 +182,7 @@ class ControlledSystem :
     # Returns x_{t+1} given x_t.
     def func (self, t, x) :
         # self.control.step(t, self.sys.g(x))
-        print(t)
+        # print(t)
         # Monotone Inclusion
         if x.dtype == np.interval :
             if self.sys.t_spec.type == 'continuous' :

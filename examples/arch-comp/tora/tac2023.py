@@ -33,6 +33,7 @@ specs = [ (x1 + 0.1), (0.2 - x1), (x2 + 0.9), (-0.6 - x2) ]
 spec_lam = [sp.lambdify((x_vars,), spec, 'numpy') for spec in specs]
 
 t_spec = ContinuousTimeSpec(0.005,0.5)
+# t_spec = ContinuousTimeSpec(0.1,0.5)
 ref = AffineRefine(
     M = np.array([
         [-1, -1, 0, 0, 1, 0],
