@@ -1,4 +1,6 @@
-import numpy as np
+# import numpy as np
+import jax
+import jax.numpy as jnp
 import interval
 import sympy as sp
 from interval import get_lu, get_iarray

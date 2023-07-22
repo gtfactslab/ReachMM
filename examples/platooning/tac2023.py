@@ -196,10 +196,10 @@ if __name__ == '__main__' :
     from tabulate import tabulate
 
     table = [['$N$ (units)', 'States', 'Runtime (s)']]
-    for N in [1,4,9,20,50] :
-        runtimes = platoon(N, False, args.runtime_N, args.mode)
-        table.append([N, 4*N, rf'${np.mean(runtimes)} \pm {np.std(runtimes)}$'])
+    # for N in [1,4,9,20,50] :
+    #     runtimes = platoon(N, False, args.runtime_N, args.mode)
+    #     table.append([N, 4*N, rf'${np.mean(runtimes)} \pm {np.std(runtimes)}$'])
 
-    print(tabulate(table,tablefmt="latex_raw"))
+    # print(tabulate(table,tablefmt="latex_raw"))
 
-    platoon(9, True, 1, args.mode)
+    platoon(30, True, 1, args.mode)

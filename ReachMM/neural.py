@@ -1,12 +1,9 @@
-import numpy as np
+import jax
+import jax.numpy as jnp
+import haiku as hk
 import interval
 from interval import get_iarray, get_lu
-import torch
-import torch.nn as nn
-from torch.autograd.functional import jacobian
-from torch.utils.data import Dataset
 from ReachMM.control import *
-from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
 from collections import defaultdict
 import os
 # from ReachMM.decomp import d_metzler, d_positive
