@@ -66,13 +66,18 @@ def run_and_plot (ax, x0, ind) :
     plot_iarray_t(ax, tt, np.array([spec2_lam(rs(t)) for t in tt]), color='tab:blue')
 
     # ax.plot(tt,np.zeros_like(tt), color='tab:red')
-    title = f'$\\mathcal{{X}}_0^{ind} = {x0}$'.replace(') ', '\\times').replace('(','').replace('[[','[').replace(')]','')
-    ax.set_title(title)
+    # title = f'${x0}$'.replace(') ', '\\times').replace('(','').replace('[[','[').replace(')]','')
+    title = f'$\\mathcal{{X}}_0^{ind}={x0}$'.replace(') ', '\\times').replace('(','').replace('[[','[').replace(')]','')
+    ax.set_title(title, fontsize=18)
+    # ax.text(-0.075, 1.025, f'$\\mathcal{{X}}_0^{ind}$', transform=ax.transAxes)
 
-    ax.set_xlabel('Time (s)')
+    ax.set_xlabel('Time (s)', fontsize=20)
 
-fig, axs = plt.subplots(2,2,dpi=100,figsize=[12,8],squeeze=False)
-fig.subplots_adjust(left=0.075, right=0.95, bottom=0.075, top=0.925, wspace=0.125, hspace=0.25)
+plt.rc('font', size=18)
+# fig, axs = plt.subplots(2,2,dpi=100,figsize=[16,8],squeeze=False)
+# fig.subplots_adjust(left=0.075, right=0.95, bottom=0.075, top=0.95, wspace=0.125, hspace=0.3)
+fig, axs = plt.subplots(2,2,dpi=100,figsize=[16,8],squeeze=False)
+fig.subplots_adjust(left=0.055, right=0.99, bottom=0.085, top=0.95, wspace=0.125, hspace=0.35)
 
 # axs[0,0].set_ylabel('$g(s_x,s_y,\dot{{s}}_x,\dot{{s}}_y)$')
 # axs[1,0].set_ylabel('$g(s_x,s_y,\dot{{s}}_x,\dot{{s}}_y)$')

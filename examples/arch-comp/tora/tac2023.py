@@ -85,8 +85,9 @@ def run () :
 
 print(f'Safe: {safe} in {np.mean(times)} \\pm {np.std(times)} (s)')
 
-fig, axs = plt.subplots(1,2,figsize=[16,8],dpi=100,squeeze=False)
-fig.subplots_adjust(left=0.075, right=0.95, bottom=0.075, top=0.925, wspace=0.125, hspace=0.25)
+plt.rc('font', size=18)
+fig, axs = plt.subplots(1,2,figsize=[11,5],dpi=100,squeeze=False)
+fig.subplots_adjust(left=0.1, right=0.975, bottom=0.125, top=0.975, wspace=0.21, hspace=0.25)
 
 axs[0,0].add_patch(Rectangle((-0.1,-0.9), 0.3, 0.3, color='tab:green', alpha=0.5))
 axs[0,1].add_patch(Rectangle((-0.1,-0.9), 0.3, 0.3, color='tab:green', alpha=0.5))
@@ -102,7 +103,8 @@ for traj in trajs :
     for ax in axs.reshape(-1) :
         ax.plot(traj(tt)[:,0], traj(tt)[:,1], color='tab:red')
         ax.set_xlabel(f'$x_1$')
-        ax.set_ylabel(f'$x_2$')
+
+axs[0,0].set_ylabel(f'$x_2$', labelpad=6, rotation='horizontal')
 
 axs[0,1].set_xlim([-0.1,0.2])
 axs[0,1].set_ylim([-0.9,-0.6])

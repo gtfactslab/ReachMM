@@ -51,8 +51,9 @@ x0 = np.array([
     np.interval(-0.25,0.25)
 ])
 
+plt.rc('font', size=18)
 fig, axs = plt.subplots(1,2,dpi=100,figsize=[11,5],squeeze=True)
-fig.subplots_adjust(left=0.05, right=0.95, bottom=0.1, top=0.95, wspace=0.125, hspace=0.2)
+fig.subplots_adjust(left=0.085, right=0.95, bottom=0.115, top=0.94, wspace=0.175, hspace=0.2)
 
 mc_trajs = clsys.compute_mc_trajectories(0,t_end,x0,200)
 
@@ -105,12 +106,15 @@ for axi, ax in enumerate(axs) :
         print(pltp.volume)
 
     legendhack = [
-        Line2D([0], [0], lw=1, color='tab:blue', label='ReachMM-CG'),
+        Line2D([0], [0], lw=1, color='tab:blue', label='ReachMM'),
         Line2D([0], [0], lw=1, color='tab:orange', label='ReachLP-Uniform'),
         Line2D([0], [0], lw=1, color='tab:green', label='ReachLipBnB'),
     ]
 
-    ax.legend(legendhack, ['ReachMM-CG', 'ReachLP-Uniform', 'ReachLipBnB'])
+    ax.legend(legendhack, ['ReachMM', 'ReachLP-Uniform', 'ReachLipBnB'])
+
+    ax.set_xlabel(f'$x_1$', labelpad=0.1)
+axs[0].set_ylabel(f'$x_2$', labelpad=6, rotation='horizontal')
 
 fig.savefig('figures/ojcsys2023/DI.pdf')
 

@@ -125,7 +125,7 @@ def platoon (N, show_plot, runtime_N, mode, rset=0.5, kp=5, kv=5, u_lim=5.0) :
     tt = t_spec.tt(0,t_end)
     xx = rs(tt)
 
-    plt.rc('font', size=14)
+    plt.rc('font', size=18)
 
     fig1, axs1 = plt.subplots(1,1,figsize=[4,6],squeeze=False)
     fig1.subplots_adjust(left=0.075, right=0.95, bottom=0.125, top=0.925, wspace=0.125, hspace=0.25)
@@ -154,7 +154,7 @@ def platoon (N, show_plot, runtime_N, mode, rset=0.5, kp=5, kv=5, u_lim=5.0) :
 
     # fig3, axs3 = plt.subplots(dim,dim,figsize=[8,8],squeeze=False,sharex='col',sharey='row')
     fig3, axs3 = plt.subplots(dim,dim,figsize=[8,8],dpi=100,squeeze=False,sharex='all',sharey='all')
-    fig3.subplots_adjust(left=0.05, right=0.95, bottom=0.1, top=0.95, wspace=0.05, hspace=0.05)
+    fig3.subplots_adjust(left=0.05, right=0.975, bottom=0.05, top=0.975, wspace=0.05, hspace=0.05)
 
     MC_N = 100
     mc_trajs = clsys.compute_mc_trajectories(0,t_end,x0,MC_N)
@@ -204,5 +204,5 @@ if __name__ == '__main__' :
 
     # print(tabulate(table,tablefmt="latex_raw"))
 
-    # platoon(9, True, 1, args.mode)
-    platoon(50, False, 1, args.mode)
+    platoon(9, True, 1, args.mode)
+    # platoon(50, False, 1, args.mode)
