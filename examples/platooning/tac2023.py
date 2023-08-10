@@ -24,6 +24,7 @@ def platoon (N, show_plot, runtime_N, mode, rset=0.5, kp=5, kv=5, u_lim=5.0) :
     x = []
 
     u_softmax = lambda x : u_lim*sp.tanh(x/u_lim)
+    # u_softmax = lambda x : x
 
     for i in range (N) :
         px_i, py_i, vx_i, vy_i = (x_i := sp.symbols(f'px_{i} py_{i} vx_{i} vy_{i}'))
@@ -83,6 +84,7 @@ def platoon (N, show_plot, runtime_N, mode, rset=0.5, kp=5, kv=5, u_lim=5.0) :
         W[0,0] = 1; W[1,1] = 1; W[2,2] = 1; W[3,3] = 1
         net.seq[0].weight = nn.Parameter(W)
 
+        # dist = UniformDisturbance([np.interval(-0.001,0.001) for w in w_vars])
         dist = UniformDisturbance([np.interval(-0.001,0.001) for w in w_vars])
         clsys = NNCSystem(sys, net, NNCSystem.InclOpts(mode), dist=dist)
         clsys.set_standard_ordering()
@@ -190,16 +192,17 @@ if __name__ == '__main__' :
     parser.add_argument('-N', '--runtime_N', help="Number of calls for time averaging",
                         type=int, default=1)
     parser.add_argument('--mode', help="Inclusion mode",
-                        type=str, default='interconnect')
+                        type=str, default='jacobian')
     args = parser.parse_args()
 
     from tabulate import tabulate
 
     table = [['$N$ (units)', 'States', 'Runtime (s)']]
-    for N in [1,4,9,20,50] :
-        runtimes = platoon(N, False, args.runtime_N, args.mode)
-        table.append([N, 4*N, rf'${np.mean(runtimes)} \pm {np.std(runtimes)}$'])
+    # for N in [1,4,9,20,50] :
+    #     runtimes = platoon(N, False, args.runtime_N, args.mode)
+    #     table.append([N, 4*N, rf'${np.mean(runtimes)} \pm {np.std(runtimes)}$'])
 
-    print(tabulate(table,tablefmt="latex_raw"))
+    # print(tabulate(table,tablefmt="latex_raw"))
 
-    platoon(9, True, 1, args.mode)
+    # platoon(9, True, 1, args.mode)
+    platoon(50, False, 1, args.mode)

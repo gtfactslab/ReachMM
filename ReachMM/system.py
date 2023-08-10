@@ -469,7 +469,8 @@ class NNCSystem (ControlledSystem) :
                 d_.append(H_n@_x + H_p@x_ - J_x@xc - J_u@uc + B_n@self.control._d + B_p@self.control.d_ 
                           - D_p@_w + D_p@w_ + fc + c_)
         
-        _d = np.array(_d); d_ = np.array(d_)
+        # _d = np.array(_d); d_ = np.array(d_)
+        # return _d, d_
 
         _xtp1 = _x + self.sys.t_spec.t_step * np.max(_d, axis=0)
         x_tp1 = x_ + self.sys.t_spec.t_step * np.min(d_, axis=0)

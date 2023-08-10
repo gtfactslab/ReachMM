@@ -41,7 +41,9 @@ clsys = NNCSystem(sys, net, uclip=uclip)
 print(sys.Df_x_sym)
 
 cent = np.array([8,7,-2*np.pi/3,2])
+# cent = np.array([0,0,0,0])
 pert = np.array([0.05,0.05,0.01,0.01])
+# pert = np.array([1,1,0.1,0.1])
 x0 = from_cent_pert(cent, pert)
 
 partitioner = UniformPartitioner(clsys)
@@ -78,31 +80,31 @@ def run_and_plot (ax, title) :
 fig, axs = plt.subplots(2,3,dpi=100,figsize=[12,8],squeeze=False)
 fig.subplots_adjust(left=0.075, right=0.95, bottom=0.075, top=0.925, wspace=0.125, hspace=0.25)
 
-# Global Interconnection Mode
-clsys.incl_opts = NNCSystem.InclOpts('interconnect')
-clsys.control.mode = 'global'
-run_and_plot(axs[0,0], f'Input-Output Mode: $\\mathsf{{F}}^\\mathrm{{io}}$')
-clsys.control.mode = 'hybrid'
+# # Global Interconnection Mode
+# clsys.incl_opts = NNCSystem.InclOpts('interconnect')
+# clsys.control.mode = 'global'
+# run_and_plot(axs[0,0], f'Input-Output Mode: $\\mathsf{{F}}^\\mathrm{{io}}$')
+# clsys.control.mode = 'hybrid'
 
-# Hybrid Interconnection Mode
-clsys.incl_opts = NNCSystem.InclOpts('interconnect')
-run_and_plot(axs[1,0], f'Interconnection: $\\mathsf{{F}}^\\mathrm{{int}}$')
+# # Hybrid Interconnection Mode
+# clsys.incl_opts = NNCSystem.InclOpts('interconnect')
+# run_and_plot(axs[1,0], f'Interconnection: $\\mathsf{{F}}^\\mathrm{{int}}$')
 
-# Cornered Mode
-ax = axs[0,1]
-clsys.incl_opts = NNCSystem.InclOpts('jacobian')
-clsys.set_two_corners()
-run_and_plot(axs[0,1], f'Cornered: $\\mathsf{{F}}^\\mathrm{{jac}}$')
+# # Cornered Mode
+# ax = axs[0,1]
+# clsys.incl_opts = NNCSystem.InclOpts('jacobian')
+# clsys.set_two_corners()
+# run_and_plot(axs[0,1], f'Cornered: $\\mathsf{{F}}^\\mathrm{{jac}}$')
 
-# Cornered+Interconnection Mode
-clsys.incl_opts = NNCSystem.InclOpts('jacobian+interconnect')
-clsys.set_two_corners()
-run_and_plot(axs[1,1], f'Interconnection + Cornered: $\\mathsf{{F}}^\\mathrm{{int}}\\wedge \\mathsf{{F}}^\\mathrm{{jac}}$')
+# # Cornered+Interconnection Mode
+# clsys.incl_opts = NNCSystem.InclOpts('jacobian+interconnect')
+# clsys.set_two_corners()
+# run_and_plot(axs[1,1], f'Interconnection + Cornered: $\\mathsf{{F}}^\\mathrm{{int}}\\wedge \\mathsf{{F}}^\\mathrm{{jac}}$')
 
-# Mixed States Cornered Mode
-clsys.incl_opts = NNCSystem.InclOpts('jacobian', orderings=[Ordering((0,1,2,3))])
-clsys.set_two_corners()
-run_and_plot(axs[0,2], f'Mixed-States Cornered Jacobian: $\\mathsf{{F}}^\\mathrm{{jac}}$')
+# # Mixed States Cornered Mode
+# clsys.incl_opts = NNCSystem.InclOpts('jacobian', orderings=[Ordering((0,1,2,3))])
+# clsys.set_two_corners()
+# run_and_plot(axs[0,2], f'Mixed-States Cornered Jacobian: $\\mathsf{{F}}^\\mathrm{{jac}}$')
 
 # Mixed States and Control Cornered Mode
 clsys.incl_opts = NNCSystem.InclOpts('jacobian', orderings=[Ordering((0,1,2,3,4,5))])

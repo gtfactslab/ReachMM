@@ -12,6 +12,12 @@ import os
 # from ReachMM.decomp import d_metzler, d_positive
 import time
 
+import gurobipy as gp
+from gurobipy import GRB
+import gurobi_ml as gml
+import numpy as np
+import interval
+
 class NeuralNetwork (nn.Module) :
     def __init__(self, dir=None, load=True, device='cpu') :
         super().__init__()
@@ -87,7 +93,9 @@ class NeuralNetworkControl (Control) :
         self.x_len = nn[0].in_features if x_len is None else x_len
         self.global_input = torch.zeros([1,self.x_len], dtype=torch.float32)
         self.nn = nn
-        self.bnn = BoundedModule(nn, self.global_input, bound_opts, device, verbose, custom_ops)
+        self.bnn = BoundedModule(nn, self.global_input, bound_opts, 
+                                 device, verbose, 
+                                 custom_ops={'relu': 'same-slope'})
         # self.global_input = global_input
         self.method = method
         self.device = device
@@ -105,6 +113,7 @@ class NeuralNetworkControl (Control) :
         self.d = None
         self.uclip = uclip
         self._uclip, self.u_clip = get_lu(uclip)
+
         
     def u (self, t, x) :
         x = self.g(x)
@@ -136,6 +145,7 @@ class NeuralNetworkControl (Control) :
         x_U = torch.tensor(x_.reshape(1,-1), dtype=torch.float32)
         ptb = PerturbationLpNorm(norm=np.inf, x_L=x_L, x_U=x_U)
         bt_input = BoundedTensor(self.global_input, ptb)
+        # self.bnn.set_bound_opts({'optimize_bound_args': {'iteration': 0, 'lr_alpha': 0.1, }})
         self.u_lb, self.u_ub, A_dict = \
             self.bnn.compute_bounds(x=(bt_input,), method=self.method, return_A=True, needed_A_dict=self.required_A)
         self.u_lb = self.u_lb.cpu().detach().numpy()
@@ -149,12 +159,38 @@ class NeuralNetworkControl (Control) :
         self._d = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['lbias'].cpu().detach().numpy().reshape(-1)
         self.d_ = A_dict[self.bnn.output_name[0]][self.bnn.input_name[0]]['ubias'].cpu().detach().numpy().reshape(-1)
         self.d = get_iarray(self._d, self.d_)
-        # print('\n_C', self._C)
-        # print('C_', self.C_)
-        # print('_d', self._d)
-        # print('d_', self.d_)
-        # input()
+        # if np.any(np.abs(self._C - self.C_) > 1e-5):
+        # if True:
+        if False:
+            print('\n_C', self._C)
+            print('C_', self.C_)
+            print('_d', self._d)
+            print('d_', self.d_)
+            # input()
 
+        gp_m = gp.Model()
+        gp_m.Params.LogToConsole = 0
+        gp_x = gp_m.addMVar((self.x_len,), lb=_x, ub=x_, name="x")
+        gp_u = gp_m.addMVar((self.u_len,), lb=-GRB.INFINITY, ub=GRB.INFINITY, name="u")
+        pred_constr = gml.add_predictor_constr(gp_m, self.nn.seq, gp_x, gp_u)
+        objvars = gp_u - self._C@gp_x
+        
+        # print('C: ', self.C)
+
+        # print('pre  _d: ', self._d)
+        # print('pre  d_: ', self.d_)
+
+        # for i, obj_i in enumerate(objvars) :
+        #     gp_m.setObjective(obj_i, GRB.MINIMIZE)
+        #     gp_m.optimize()
+        #     self._d[i] = gp_m.objVal
+        #     gp_m.setObjective(obj_i, GRB.MAXIMIZE)
+        #     gp_m.optimize()
+        #     self.d_[i] = gp_m.objVal
+
+        print('post _d: ', self._d)
+        print('post d_: ', self.d_)
+        print('\n')
     
     def __str__(self) -> str:
         return f'{str(self.nn)}, {self.mode} mode'
