@@ -175,18 +175,18 @@ class NeuralNetworkControl (Control) :
         pred_constr = gml.add_predictor_constr(gp_m, self.nn.seq, gp_x, gp_u)
         objvars = gp_u - self._C@gp_x
         
-        # print('C: ', self.C)
+        print('C: ', self.C)
 
-        # print('pre  _d: ', self._d)
-        # print('pre  d_: ', self.d_)
+        print('pre  _d: ', self._d)
+        print('pre  d_: ', self.d_)
 
-        # for i, obj_i in enumerate(objvars) :
-        #     gp_m.setObjective(obj_i, GRB.MINIMIZE)
-        #     gp_m.optimize()
-        #     self._d[i] = gp_m.objVal
-        #     gp_m.setObjective(obj_i, GRB.MAXIMIZE)
-        #     gp_m.optimize()
-        #     self.d_[i] = gp_m.objVal
+        for i, obj_i in enumerate(objvars) :
+            gp_m.setObjective(obj_i, GRB.MINIMIZE)
+            gp_m.optimize()
+            self._d[i] = gp_m.objVal
+            gp_m.setObjective(obj_i, GRB.MAXIMIZE)
+            gp_m.optimize()
+            self.d_[i] = gp_m.objVal
 
         print('post _d: ', self._d)
         print('post d_: ', self.d_)

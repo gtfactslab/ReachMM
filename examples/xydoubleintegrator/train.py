@@ -5,16 +5,18 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from ReachMM import ControlFunction
 from ReachMM import NeuralNetwork, NeuralNetworkData, ScaledMSELoss
 from ReachMM.utils import file_to_numpy
 
-MODELNAME = '100r100r2'
-FILENAMES = ['twoobs_20230302-061841', 
-             'twoobs_20230302-061907', 
-             'twoobs_20230302-062016', 
-             'twoobs_20230302-063704', 
-             'twoobs_20230302-073059']
+# MODELNAME = '100r100r2'
+# FILENAMES = ['twoobs_20230302-061841', 
+#              'twoobs_20230302-061907', 
+#              'twoobs_20230302-062016', 
+#              'twoobs_20230302-063704', 
+#              'twoobs_20230302-073059']
+MODELNAME = '100r100r2_MPC'
+FILENAMES = ['mpc_20230811-172013']
+
 EPOCHS = 10
 LEARNING = 0.2
 LEARNING_GAM = 0.9
@@ -40,11 +42,11 @@ print(Xtrain.dtype)
 
 fig, axs = plt.subplots(2, 2,figsize=[8,8], dpi=100)
 axs = axs.reshape(-1)
-axs[0].scatter(Xtest[:,0], Xtest[:,1], s=1)
-axs[0].set_title("y vs x")
+axs[0].scatter(Xtest[:,0], Xtest[:,2], s=1)
+axs[0].set_title("py vs px")
 axs[0].set_xlim([-15,15]); axs[0].set_ylim([-15,15])
-axs[1].scatter(Xtest[:,2], Xtest[:,3], s=1)
-axs[1].set_title("v vs psi")
+axs[1].scatter(Xtest[:,1], Xtest[:,3], s=1)
+axs[1].set_title("vy vs vx")
 axs[2].scatter(Utest[:,0], Utest[:,1], s=1)
 axs[2].set_title("uang vs uacc (data)")
 plt.ion(); plt.show(); plt.pause(1)

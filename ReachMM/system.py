@@ -182,7 +182,7 @@ class ControlledSystem :
     # Returns x_{t+1} given x_t.
     def func (self, t, x) :
         # self.control.step(t, self.sys.g(x))
-        print(t)
+        # print(t)
         # Monotone Inclusion
         if x.dtype == np.interval :
             if self.sys.t_spec.type == 'continuous' :
@@ -217,6 +217,20 @@ class ControlledSystem :
                 xx.set(t + self.sys.t_spec.t_step, self.func(t, xx(t)))
 
         return xx
+    
+    def compute_trajectory_uu (self, t0, tf, x0) :
+        xx = Trajectory(self.sys.t_spec, t0, x0, tf)
+        uu = []
+
+        for tt in self.sys.t_spec.tu(t0, tf) :
+            self.control.prime(xx(tt[0]))
+            self.control.step(0,xx(tt[0]))
+            uu.append(self.control.uCALC)
+            self.prime(xx(tt[0]))
+            for j, t in enumerate(tt) :
+                xx.set(t + self.sys.t_spec.t_step, self.func(t, xx(t)))
+
+        return xx, np.array(uu)
     
     def compute_mc_trajectories (self, t0, tf, x0, N) :
         if x0.dtype != np.interval :

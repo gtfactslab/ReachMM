@@ -10,7 +10,7 @@ from interval import from_cent_pert
 import sympy as sp
 
 from ReachMM import DiscreteTimeSpec, ContinuousTimeSpec
-from ReachMM import System, NeuralNetwork, NNCSystem, NeuralNetworkControl
+from ReachMM import System, NeuralNetwork, NNCSystem, NeuralNetworkControl, NoDisturbance, ConstantDisturbance
 from ReachMM import UniformPartitioner, CGPartitioner
 from ReachMM.utils import run_times
 import matplotlib.pyplot as plt
@@ -21,33 +21,26 @@ import shapely.ops as so
 import polytope
 import torch
 
-x1, x2, u, w = sp.symbols('x1 x2 u w')
-
-# A = np.array([[0,1],[0,0]])
-# B = np.array([[0],[1]])
-# A = np.array([[1,1],[0,1]])
-# B = np.array([[0.5],[1]])
 A = np.array([[0,1,0,0],[0,0,0,0],[0,0,0,1],[0,0,0,0]])
 B = np.array([[0,0],[1,0],[0,0],[0,1]])
+Q = np.array([ [1,0,0,0], [0,1,0,0], [0,0,1,0], [0,0,0,1] ])
+R = np.array([ [0.5,0], [0,0.5] ])
 
-# f_eqn = [
-#     x1 + x2 + 0.5*u,
-#     x2 + u
-# ]
-# net = NeuralNetwork('models/10r5r1')
-# net = NeuralNetwork('../platooning/models/100r100r2')
-net = NeuralNetwork('../xydoubleintegrator/models/100r100r2_LQR')
-# net = NeuralNetwork('models/close_linear')
+px, vx, py, vy = (x_vars := sp.symbols('px vx py vy'))
+ux, uy = (u_vars := sp.symbols('ux uy'))
+wx, wy = (w_vars := sp.symbols('wx wy'))
+f_eqn = A@x_vars + B@u_vars
+t_spec = ContinuousTimeSpec(0.1, 0.1)
+sys = System(x_vars, u_vars, w_vars, f_eqn, t_spec)
+print(sys)
+net = NeuralNetwork('models/100r100r2_MPC')
+clsys = NNCSystem(sys, net, NNCSystem.InclOpts('jacobian'), dist=NoDisturbance(2))
 
-# K = np.array([[-0.24977, -0.69873]])
-# K = np.array([[-0.48963, -0.96968]])
-# K = np.array([[-0.638  0.43499]])
-# K = np.array([[-0.40741, -0.90137]])
-# K = np.array([[-0.47133, -0.17458]])
-# K = np.array([[-1.6, -5.1]])
-# K = [[-0.2081, -0.008447]]
+onetraj = clsys.compute_trajectory(0,100,np.zeros(4))
+xeq = onetraj(100)
+print(xeq)
 
-x0 = np.array([
+x0 = xeq + np.array([
     np.interval(-0.1,0.1),
     np.interval(-0.1,0.1),
     np.interval(-0.1,0.1),
@@ -57,9 +50,6 @@ nnc = NeuralNetworkControl(net)
 nnc.prime(x0)
 nnc.step(0,x0)
 K = nnc._C
-
-# input()
-
 # K = (torch.autograd.functional.jacobian(net,torch.zeros(4))).cpu().detach().numpy()
 print('K: ', K)
 Acl = A + B@K
@@ -69,10 +59,8 @@ L, U = np.linalg.eig(Acl)
 print(L)
 print(U)
 
-input()
-
 # T = U
-T = np.array([-np.real(U[:,0]),np.imag(U[:,0])]).T
+T = np.array([-np.real(U[:,0]),np.imag(U[:,0]),-np.real(U[:,2]),np.imag(U[:,2])]).T
 # T = np.array([[1,2],[1,0]])
 Tinv = np.linalg.inv(T)
 temp = T
@@ -86,10 +74,10 @@ print(Tinv)
 print('K*Tinv')
 print(K@Tinv)
 
-# net.seq.insert(0, torch.nn.Linear(2,2,False))
+net.seq.insert(0, torch.nn.Linear(4,4))
 # net.seq.append(torch.nn.Linear(2,2,False))
-# net[0].weight = torch.nn.Parameter(torch.tensor(Tinv.astype(np.float32)))
-# net[0].bias = torch.nn.Parameter(torch.tensor([0,0],dtype=torch.float32))
+net[0].weight = torch.nn.Parameter(torch.tensor(Tinv.astype(np.float32)))
+net[0].bias = torch.nn.Parameter(torch.tensor([0,0,0,0],dtype=torch.float32))
 # net[-1].weight = torch.nn.Parameter(torch.tensor(T))
 
 A = T@(A)@Tinv
@@ -97,50 +85,49 @@ print('A transformed: ')
 print(A)
 B = T@B
 # f_eqn = sp.Matrix(A)@sp.Matrix([x1,x2]) + sp.Matrix(B)@K@Tinv@sp.Matrix([x1,x2]) #+ sp.Matrix(B)@sp.Matrix([u])
-f_eqn = sp.Matrix(A)@sp.Matrix([x1,x2]) + sp.Matrix(B)@sp.Matrix([u])
-# f_eqn = [f_mult[0], f_mult[1]]
-# f_eqn = sp.Matrix(A)@sp.Matrix([x1,x2]) + sp.Matrix(B)@sp.Matrix(K)@sp.Matrix([x1,x2])
-# f_eqn = sp.Matrix(A)@sp.Matrix([x1,x2])
-# print(f_eqn)
+f_eqn = A@x_vars + B@u_vars
 
-# t_spec = DiscreteTimeSpec()
 t_spec = ContinuousTimeSpec(0.1,0.1)
-t_span = [0,5]
+t_span = [0,0.1]
 tt = t_spec.tt(*t_span)
-sys = System([x1, x2], [u], [w], f_eqn, t_spec)
-clsys = NNCSystem(sys, net, NNCSystem.InclOpts('jacobian'))
+sys = System(x_vars, u_vars, w_vars, f_eqn, t_spec)
+dist_int = np.array( [np.interval(-0.01,0.01), np.interval(-0.01,0.01)] )
+dist_cent, dist_pert = interval.get_cent_pert(dist_int)
+clsys = NNCSystem(sys, net, NNCSystem.InclOpts('jacobian'), dist=ConstantDisturbance(dist_cent, dist_int))
 partitioner = UniformPartitioner(clsys)
 part_opts = UniformPartitioner.Opts(0,0)
 
 print(clsys)
 
-# x0 = T @ np.array([
-#     np.interval(-0.1,0.1),
-#     np.interval(-0.1,0.1)
-# ])
-# x0 = T @ np.array([
-#     np.interval(2.5,3.0),
-#     np.interval(-0.25,0.25)
-# ])
 # x0 = np.array([
 #     np.interval(-0.1,0.1),
-#     np.interval(-0.1,0.1)
+#     np.interval(-0.1,0.1),
+#     np.interval(-0.3,0.7),
+#     np.interval(-0.3,0.7)
 # ])
-x0 = np.array([
-    np.interval(-1,1),
-    np.interval(-1,1)
+x0 = T@xeq + np.array([
+    np.interval(-0.2,0.2),
+    np.interval(-0.3,0.3),
+    np.interval(-0.3,0.3),
+    np.interval(-0.5,0.5)
 ])
 print(net.seq[0].bias)
 print(x0)
 
+fig, axs = plt.subplots(1,2)
+
 rs = partitioner.compute_reachable_set(*t_span, x0, part_opts)
 
-rs.draw_rs(plt, tt)
+rs.draw_rs(axs[0], tt, 0, 1)
+rs.draw_rs(axs[1], tt, 2, 3)
+print(rs(t_span[1]))
+
 # polytope.Polytope()
 
 mc_trajs = clsys.compute_mc_trajectories(*t_span, x0, 1000)
 for mc_traj in mc_trajs :
-    mc_traj.plot2d(plt, tt)
+    mc_traj.plot2d(axs[0], tt, 0, 1, zorder=0)
+    mc_traj.plot2d(axs[1], tt, 2, 3, zorder=0)
 # traj = clsys.compute_trajectory(*t_span, np.array([0.0,0.005]))
 # traj.plot2d(plt, tt)
 
