@@ -18,8 +18,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import torch
 
-x1, x2, x3, x4, y1, y2, u, w = sp.symbols('x1 x2 x3 x4 y1 y2 u w')
-x_vars = [x1, x2, x3, x4, y1, y2]
+x1, x2, x3, x4 = (x_vars := sp.symbols('x1 x2 x3 x4'))
+u, w = sp.symbols('u w')
 
 f_eqn = [
     x2,
@@ -27,87 +27,97 @@ f_eqn = [
     x4,
     11*sp.tanh(u),
 ]
-specs = [ (x1 + 0.1), (0.2 - x1), (x2 + 0.9), (-0.6 - x2) ]
-spec_lam = [sp.lambdify((x_vars,), spec, 'numpy') for spec in specs]
 
 t_spec = ContinuousTimeSpec(0.005,0.5)
-ref = AffineRefine(
-    M = np.array([
-        [-1, -1, 0, 0, 1, 0],
-        [-1,  1, 0, 0, 0, 1],
-    ]),
-    b = np.array([ 0,0 ])
-)
-sys = System(x_vars, [u], [w], f_eqn, t_spec, ref)
+sys = System(x_vars, [u], [w], f_eqn, t_spec)
 net = NeuralNetwork('models/nn_tora_relu_tanh')
 # Remove final tanh and offset layer.
 del(net.seq[-1])
 del(net.seq[-1])
-g_lin = torch.nn.Linear(6,4,False)
-g_lin.weight = torch.nn.Parameter(
-    torch.tensor(np.array([
-        [1,0,0,0,0,0],
-        [0,1,0,0,0,0],
-        [0,0,1,0,0,0],
-        [0,0,0,1,0,0],
-    ]).astype(np.float32))
-)
-net.seq.insert(0, g_lin)
 print(net.seq)
 clsys = NNCSystem(sys, net, incl_opts=NNCSystem.InclOpts('jacobian+interconnect'))
 clsys.set_standard_ordering()
 clsys.set_four_corners()
 t_end = 5
 
-x0 = np.array([
-    np.interval(-0.77,-0.75),
-    np.interval(-0.45,-0.43),
-    np.interval(0.51,0.54),
-    np.interval(-0.3,-0.28),
-    np.interval(-0.77,-0.75) + np.interval(-0.45,-0.43),
-    np.interval(-0.77,-0.75) - np.interval(-0.45,-0.43),
+print(clsys)
+
+onetraj = clsys.compute_trajectory(0,100,np.zeros(4))
+xeq = onetraj(100)
+# xeq = np.zeros(4)
+
+Aeq, Beq, Deq = sys.get_ABD(xeq, clsys.control.u(0,xeq), [0])
+
+x0 = xeq + np.array([
+    np.interval(-0.5,0.5),
+    np.interval(-0.5,0.5),
+    np.interval(-0.5,0.5),
+    np.interval(-0.5,0.5)
 ])
-xcent, xpert = get_cent_pert(x0)
+nnc = NeuralNetworkControl(net)
+nnc.prime(x0)
+nnc.step(0,x0)
+K = nnc._C
+print('K: ', K)
+Acl = Aeq + Beq@K
+L, U = np.linalg.eig(Acl)
+print(L)
+print(U)
+
+Tinv = np.array([-np.real(U[:,0]),np.imag(U[:,0]),-np.real(U[:,2]),np.imag(U[:,2])]).T
+# Tinv = np.eye(4)
+T = np.linalg.inv(Tinv)
+print('T: '); print(T)
+print('Tinv: '); print(Tinv)
+
+net.seq.insert(0, torch.nn.Linear(4,4))
+net[0].weight = torch.nn.Parameter(torch.tensor(Tinv.astype(np.float32)))
+net[0].bias = torch.nn.Parameter(torch.tensor([0,0,0,0],dtype=torch.float32))
+
+y1, y2, y3, y4 = (y_vars := sp.symbols('y1 y2 y3 y4'))
+print(y_vars)
+
+xr1, xr2, xr3, xr4 = tuple(Tinv@sp.Matrix(y_vars))
+
+g_eqn = sp.Matrix(f_eqn)
+g_eqn = g_eqn.subs(x1, xr1).subs(x2, xr2).subs(x3, xr3).subs(x4, xr4)
+g_eqn = T@g_eqn
+print(g_eqn)
+
+t_spec = ContinuousTimeSpec(0.1,0.1)
+t_span = [0,1]
+tt = t_spec.tt(*t_span)
+sys = System(y_vars, [u], [w], g_eqn, t_spec)
+clsys = NNCSystem(sys, net, incl_opts=NNCSystem.InclOpts('jacobian+interconnect'))
+clsys.set_standard_ordering()
+clsys.set_four_corners()
 
 partitioner = UniformPartitioner(clsys)
-popts = UniformPartitioner.Opts(0, 0)
+part_opts = UniformPartitioner.Opts(0,0)
 
-tt = t_spec.tt(0,t_end)
+x0 = T@xeq + np.array([
+    np.interval(-1,1),
+    np.interval(-1,1),
+    np.interval(-2,2),
+    np.interval(-2,2)
+])
 
-def run () :
-    rs = partitioner.compute_reachable_set(0,t_end,x0,popts)
-    safe = rs.check_safety_tt(spec_lam, tt)
-    return rs, safe
-(rs, safe), times = run_times(args.runtime_N, run)
+fig, axs = plt.subplots(1,2,figsize=[8,4])
 
-print(f'Safe: {safe} in {np.mean(times)} \\pm {np.std(times)} (s)')
+# rs = partitioner.compute_reachable_set(*t_span, x0, part_opts)
+# rs.draw_rs(axs[0], tt, 0, 1)
+# rs.draw_rs(axs[1], tt, 2, 3)
+# print(rs(t_span[0]))
+# print(rs(t_span[1]))
+# print(np.subseteq(rs(t_span[1]), rs(t_span[0])))
 
-fig, axs = plt.subplots(1,2,figsize=[16,8],dpi=100,squeeze=False)
-fig.subplots_adjust(left=0.075, right=0.95, bottom=0.075, top=0.925, wspace=0.125, hspace=0.25)
+mc_trajs = clsys.compute_mc_trajectories(*t_span, x0, 1000)
+for mc_traj in mc_trajs :
+    xx = Tinv@mc_traj(tt).T
+    # mc_traj.plot2d(axs[0], tt, 0, 1, zorder=0)
+    # mc_traj.plot2d(axs[1], tt, 2, 3, zorder=0)
+    axs[0].plot(xx[0,:], xx[1,:], zorder=0)
+    axs[1].plot(xx[2,:], xx[3,:], zorder=0)
 
-axs[0,0].add_patch(Rectangle((-0.1,-0.9), 0.3, 0.3, color='tab:green', alpha=0.5))
-axs[0,1].add_patch(Rectangle((-0.1,-0.9), 0.3, 0.3, color='tab:green', alpha=0.5))
-
-xx = rs(tt)
-print(rs(t_end))
-rs.draw_rs(axs[0,0], tt[::10])
-rs.draw_rs(axs[0,1], tt)
-
-trajs = clsys.compute_mc_trajectories(0,t_end,x0,100)
-tt = clsys.sys.t_spec.tt(0,t_end)
-for traj in trajs :
-    for ax in axs.reshape(-1) :
-        ax.plot(traj(tt)[:,0], traj(tt)[:,1], color='tab:red')
-        ax.set_xlabel(f'$x_1$')
-        ax.set_ylabel(f'$x_2$')
-
-axs[0,1].set_xlim([-0.1,0.2])
-axs[0,1].set_ylim([-0.9,-0.6])
-
-# ax.set_xlabel(f'$x_1$')
-# ax.set_ylabel(f'$x_2$')
-
-fig.savefig('figures/tora_tac2023.pdf')
 plt.show()
-
 

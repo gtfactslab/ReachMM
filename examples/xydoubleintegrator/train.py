@@ -15,7 +15,7 @@ from ReachMM.utils import file_to_numpy
 #              'twoobs_20230302-063704', 
 #              'twoobs_20230302-073059']
 MODELNAME = '100r100r2_MPC'
-FILENAMES = ['mpc_20230811-172013']
+FILENAMES = ['mpc_20230817-125213']
 
 EPOCHS = 10
 LEARNING = 0.2

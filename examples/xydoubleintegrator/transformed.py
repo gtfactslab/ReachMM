@@ -41,10 +41,10 @@ xeq = onetraj(100)
 print(xeq)
 
 x0 = xeq + np.array([
-    np.interval(-0.1,0.1),
-    np.interval(-0.1,0.1),
-    np.interval(-0.1,0.1),
-    np.interval(-0.1,0.1)
+    np.interval(-0.05,0.05),
+    np.interval(-0.05,0.05),
+    np.interval(-0.05,0.05),
+    np.interval(-0.05,0.05)
 ])
 nnc = NeuralNetworkControl(net)
 nnc.prime(x0)
@@ -62,6 +62,7 @@ print(U)
 # T = U
 T = np.array([-np.real(U[:,0]),np.imag(U[:,0]),-np.real(U[:,2]),np.imag(U[:,2])]).T
 # T = np.array([[1,2],[1,0]])
+# T = np.eye(4)
 Tinv = np.linalg.inv(T)
 temp = T
 T = Tinv
@@ -88,7 +89,8 @@ B = T@B
 f_eqn = A@x_vars + B@u_vars
 
 t_spec = ContinuousTimeSpec(0.1,0.1)
-t_span = [0,0.1]
+# t_span = [0,0.1]
+t_span = [0,10]
 tt = t_spec.tt(*t_span)
 sys = System(x_vars, u_vars, w_vars, f_eqn, t_spec)
 dist_int = np.array( [np.interval(-0.01,0.01), np.interval(-0.01,0.01)] )
@@ -106,30 +108,43 @@ print(clsys)
 #     np.interval(-0.3,0.7)
 # ])
 x0 = T@xeq + np.array([
-    np.interval(-0.2,0.2),
-    np.interval(-0.3,0.3),
-    np.interval(-0.3,0.3),
-    np.interval(-0.5,0.5)
+    np.interval(-0.05,0.05),
+    np.interval(-0.05,0.05),
+    np.interval(-0.05,0.05),
+    np.interval(-0.08,0.08)
 ])
+# x0 = T@xeq + np.array([
+#     np.interval(-10,10),
+#     np.interval(-1,1),
+#     np.interval(-10,10),
+#     np.interval(-1,1)
+# ])
 print(net.seq[0].bias)
 print(x0)
 
-fig, axs = plt.subplots(1,2)
+fig, axs = plt.subplots(1,2,figsize=[8,4])
 
-rs = partitioner.compute_reachable_set(*t_span, x0, part_opts)
+# rs = partitioner.compute_reachable_set(*t_span, x0, part_opts)
 
-rs.draw_rs(axs[0], tt, 0, 1)
-rs.draw_rs(axs[1], tt, 2, 3)
-print(rs(t_span[1]))
+# rs.draw_rs(axs[0], tt, 0, 1)
+# rs.draw_rs(axs[1], tt, 2, 3)
+# print(rs(t_span[0]))
+# print(rs(t_span[1]))
+# print(np.subseteq(rs(t_span[1]), rs(t_span[0])))
 
 # polytope.Polytope()
 
-mc_trajs = clsys.compute_mc_trajectories(*t_span, x0, 1000)
+mc_trajs = clsys.compute_mc_trajectories(*t_span, x0, 200)
 for mc_traj in mc_trajs :
     mc_traj.plot2d(axs[0], tt, 0, 1, zorder=0)
     mc_traj.plot2d(axs[1], tt, 2, 3, zorder=0)
 # traj = clsys.compute_trajectory(*t_span, np.array([0.0,0.005]))
 # traj.plot2d(plt, tt)
 
+axs[0].add_patch(Circle((4,4),3/1.25,lw=0,fc='salmon',zorder=-1))
+axs[0].add_patch(Circle((-4,4),3/1.25,lw=0,fc='salmon',zorder=-1))
+axs[0].add_patch(Circle((-4,-4),3/1.25,lw=0,fc='salmon',zorder=-1))
+axs[0].add_patch(Circle((4,-4),3/1.25,lw=0,fc='salmon',zorder=-1))
+        
 plt.show()
 

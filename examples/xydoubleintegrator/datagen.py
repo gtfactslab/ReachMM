@@ -13,9 +13,9 @@ from control import lqr
 import sympy as sp
 from mpc import MPCController
 
-NUM_TRAJS = 2000
+NUM_TRAJS = 100000
 FILENAME = 'mpc'
-PROCESSES = 20
+PROCESSES = 10
 PLOT_DATA = False
 
 FILEPATH = 'data/' + FILENAME + datetime.now().strftime('_%Y%m%d-%H%M%S') + '.npy'
