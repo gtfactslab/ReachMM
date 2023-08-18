@@ -147,7 +147,8 @@ class NeuralNetworkControl (Control) :
         bt_input = BoundedTensor(self.global_input, ptb)
         # self.bnn.set_bound_opts({'optimize_bound_args': {'iteration': 0, 'lr_alpha': 0.1, }})
         self.u_lb, self.u_ub, A_dict = \
-            self.bnn.compute_bounds(x=(bt_input,), method=self.method, return_A=True, needed_A_dict=self.required_A)
+            self.bnn.compute_bounds(x=(bt_input,), method=self.method, return_A=True, 
+                                    needed_A_dict=self.required_A, aux={'relu': 'same-slope'})
         self.u_lb = self.u_lb.cpu().detach().numpy()
         self.u_ub = self.u_ub.cpu().detach().numpy()
 

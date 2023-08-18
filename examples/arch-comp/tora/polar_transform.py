@@ -41,7 +41,7 @@ def inv_trans (x) :
 inv_trans_sym = [r*sp.cos(th), r*sp.sin(th), x3, x4]
 
 # t_spec = ContinuousTimeSpec(0.05,0.5)
-t_spec = ContinuousTimeSpec(0.1,1)
+t_spec = ContinuousTimeSpec(0.1,0.1)
 sys = System(x_vars, [u], [w], f_eqn, t_spec)
 # net = NeuralNetwork('models/nn_tora_relu_tanh')
 net = NeuralNetwork('models/controllerTora')
@@ -53,15 +53,15 @@ clsys = NNCSystem(sys, net, incl_opts=NNCSystem.InclOpts('interconnect'),
                   g_tuple=(x_vars,), g_eqn=inv_trans_sym)
 # clsys.set_standard_ordering()
 # clsys.set_four_corners()
-t_span = [0,10]
+t_span = [0,0.1]
 tt = t_spec.tt(*t_span)
 
-# x0 = np.array([
-#     np.interval(0,2),
-#     np.interval(-np.pi,np.pi),
-#     np.interval(-0.5,0.5),
-#     np.interval(-0.5,0.5)
-# ])
+x0 = np.array([
+    np.interval(0,2),
+    np.interval(-np.pi,np.pi),
+    np.interval(-1,1),
+    np.interval(-1,1)
+])
 
 # x0 = for_trans(np.array([
 #     np.interval(-0.77,-0.75),
@@ -69,12 +69,12 @@ tt = t_spec.tt(*t_span)
 #     np.interval(0.51,0.54),
 #     np.interval(-0.3,-0.28)
 # ]))
-x0 = for_trans(np.array([
-    np.interval(0.6,0.7),
-    np.interval(-0.7,-0.6),
-    np.interval(-0.4,-0.3),
-    np.interval(0.5,0.6)
-]))
+# x0 = for_trans(np.array([
+#     np.interval(0.6,0.7),
+#     np.interval(-0.7,-0.6),
+#     np.interval(-0.4,-0.3),
+#     np.interval(0.5,0.6)
+# ]))
 
 partitioner = UniformPartitioner(clsys)
 popts = UniformPartitioner.Opts(0,0)

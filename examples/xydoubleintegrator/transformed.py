@@ -89,8 +89,8 @@ B = T@B
 f_eqn = A@x_vars + B@u_vars
 
 t_spec = ContinuousTimeSpec(0.1,0.1)
-# t_span = [0,0.1]
-t_span = [0,10]
+t_span = [0,0.1]
+# t_span = [0,10]
 tt = t_spec.tt(*t_span)
 sys = System(x_vars, u_vars, w_vars, f_eqn, t_spec)
 dist_int = np.array( [np.interval(-0.01,0.01), np.interval(-0.01,0.01)] )
@@ -110,8 +110,8 @@ print(clsys)
 x0 = T@xeq + np.array([
     np.interval(-0.05,0.05),
     np.interval(-0.05,0.05),
-    np.interval(-0.05,0.05),
-    np.interval(-0.08,0.08)
+    np.interval(-0.07,0.07),
+    np.interval(-0.1,0.1)
 ])
 # x0 = T@xeq + np.array([
 #     np.interval(-10,10),
@@ -124,13 +124,13 @@ print(x0)
 
 fig, axs = plt.subplots(1,2,figsize=[8,4])
 
-# rs = partitioner.compute_reachable_set(*t_span, x0, part_opts)
+rs = partitioner.compute_reachable_set(*t_span, x0, part_opts)
 
-# rs.draw_rs(axs[0], tt, 0, 1)
-# rs.draw_rs(axs[1], tt, 2, 3)
-# print(rs(t_span[0]))
-# print(rs(t_span[1]))
-# print(np.subseteq(rs(t_span[1]), rs(t_span[0])))
+rs.draw_rs(axs[0], tt, 0, 1)
+rs.draw_rs(axs[1], tt, 2, 3)
+print(rs(t_span[0]))
+print(rs(t_span[1]))
+print(np.subseteq(rs(t_span[1]), rs(t_span[0])))
 
 # polytope.Polytope()
 
@@ -141,10 +141,10 @@ for mc_traj in mc_trajs :
 # traj = clsys.compute_trajectory(*t_span, np.array([0.0,0.005]))
 # traj.plot2d(plt, tt)
 
-axs[0].add_patch(Circle((4,4),3/1.25,lw=0,fc='salmon',zorder=-1))
-axs[0].add_patch(Circle((-4,4),3/1.25,lw=0,fc='salmon',zorder=-1))
-axs[0].add_patch(Circle((-4,-4),3/1.25,lw=0,fc='salmon',zorder=-1))
-axs[0].add_patch(Circle((4,-4),3/1.25,lw=0,fc='salmon',zorder=-1))
+# axs[0].add_patch(Circle((4,4),3/1.25,lw=0,fc='salmon',zorder=-1))
+# axs[0].add_patch(Circle((-4,4),3/1.25,lw=0,fc='salmon',zorder=-1))
+# axs[0].add_patch(Circle((-4,-4),3/1.25,lw=0,fc='salmon',zorder=-1))
+# axs[0].add_patch(Circle((4,-4),3/1.25,lw=0,fc='salmon',zorder=-1))
         
 plt.show()
 
