@@ -15,7 +15,7 @@ from ReachMM.utils import file_to_numpy
 #              'twoobs_20230302-063704', 
 #              'twoobs_20230302-073059']
 MODELNAME = '100r100r2_MPC'
-FILENAMES = ['mpc_20230817-125213']
+FILENAMES = ['mpc_20230811-172013']
 
 EPOCHS = 10
 LEARNING = 0.2
@@ -28,6 +28,8 @@ device = 'cuda'
 
 X, U = file_to_numpy(FILENAMES)
 SPLIT_LOC = int(TRAINP * X.shape[0])
+
+print(X.shape)
 
 # Xtrain = X[:SPLIT_LOC,:]
 # Utrain = U[:SPLIT_LOC,:]

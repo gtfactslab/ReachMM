@@ -4,5 +4,6 @@ from .neural import *
 from .control import *
 from .system import *
 from .reach import *
+from .invariance import *
 # Usage: from ReachMM.utils import run_time
 from . import utils

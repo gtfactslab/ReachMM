@@ -40,6 +40,8 @@ def inv_trans (x) :
 
 inv_trans_sym = [r*sp.cos(th), r*sp.sin(th), x3, x4]
 
+print(sp.Matrix(inv_trans_sym).jacobian(x_vars))
+
 # t_spec = ContinuousTimeSpec(0.05,0.5)
 t_spec = ContinuousTimeSpec(0.1,0.1)
 sys = System(x_vars, [u], [w], f_eqn, t_spec)

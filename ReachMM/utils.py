@@ -1,5 +1,6 @@
 import time
 import numpy as np
+from numpy.typing import ArrayLike
 import interval
 from interval import get_lu
 from numpy import diag_indices_from, clip, inf, empty
@@ -9,6 +10,7 @@ from matplotlib.collections import LineCollection
 from tqdm import tqdm
 import shapely.geometry as sg
 import shapely.ops as so
+import sympy as sp
 
 def run_time (func, *args, **kwargs) :
     before = time.time()
@@ -226,3 +228,63 @@ def set_columns_from_corner (corner, _A, A_) :
             _Jx[:,i] = A_[:,i] # Use A_ when cornered on ub
             J_x[:,i] = _A[:,i] # Use _A when cornered on ub
     return _Jx, J_x
+
+def jordan_canonical (A:ArrayLike, verbose:bool=False) :
+    """Compute the Jordan Canonical Form of A (real Jordan Blocks)
+
+    Args:
+        A (ArrayLike): Matrix to compute the Jordan Canonical Form for
+        verbose (bool, optional): Verbose printing. Defaults to False.
+    """
+
+    # A = P J P^{-1}
+    # P, J = sp.Matrix(A).jordan_form()
+    J,P = np.linalg.eig(A)
+    J = np.diag(J)
+    P = P
+    P = np.array(P).astype(np.complex64)
+    J = np.array(J).astype(np.complex64)
+    if verbose :
+        print(f'P (complex): {P}')
+        print(f'J (complex): {J}')
+    
+    # Convert complex Jordan blocks to real 2x2 blocks
+    Preal = np.real(P)
+    Pimag = np.imag(P)
+    Jreal = np.real(J)
+    Jimag = np.imag(J)
+    skip = False
+    zeros = np.zeros_like(Preal[0,:])
+    Poutr = np.empty_like(Preal)
+    Pouti = np.empty_like(Pimag)
+    Joutr = np.empty_like(Jreal)
+    Jouti = np.empty_like(Jimag)
+    for i in range(len(Jimag)) :
+        if not skip :
+            if np.iscomplex(J[i,i]) :
+                print('is complex')
+                Poutr[i,:] = -Preal[i,:]
+                Pouti[i,:] = zeros
+                Poutr[i+1,:] = zeros
+                Pouti[i+1,:] = Pimag[i+1,:]
+                Jouti[i+1,i] = -Jimag[i,i]
+                Jouti[i,i+1] = Jimag[i,i]
+                Jouti[i,i] = 0
+                Jouti[i+1,i+1] = 0
+                skip = True
+        else :
+            skip = False
+    
+    P = Poutr + Pouti
+    J = Joutr + Jouti
+    
+    if verbose :
+        print(f'P (real): {P}')
+        print(f'J (real): {J}')
+
+    return P, J
+
+A = np.array([[0,2],[-1,-1]])
+P, J = jordan_canonical(A, True)
+
+print(P@J@np.linalg.inv(P))

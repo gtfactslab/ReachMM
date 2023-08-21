@@ -201,6 +201,7 @@ class ControlledSystem :
             else :
                 return self.sys.f(x,self.control.uCALC,self.dist.w(t,x))[0].reshape(-1)
 
+
     # Abstract method to prepare for the next control interval.
     def prime (self, x) :
         # self.control.prime(x)
@@ -328,6 +329,43 @@ class NNCSystem (ControlledSystem) :
         # Returns x_{t+1} given x_t (euler disc. for continuous time based on t_spec.t_step)
         # Assumes access to pre-computed control in self.control (call control.step before this)
         # Monotone Inclusion
+        if x.dtype == np.interval :
+            ret = []
+            for method in self.incl_opts.method.split('+') :
+                self.incl_method = method
+                if method == 'jacobian' :
+                    if self.sys.t_spec.type == 'continuous' :
+                        if self.sys.type == 'nonlinear' :
+                            ret.append(np.intersection(self._nl_jac_cont(t, x), self.sys.x_clip))
+                        elif self.sys.type == 'linear' :
+                            ret.append(np.intersection(self._l_jac_cont(t, x), self.sys.x_clip))
+                            # return self._nl_jac_cont(t, x)
+                    else :
+                        if self.sys.type == 'nonlinear' :
+                            ret.append(np.intersection(self._nl_jac_disc(t, x), self.sys.x_clip))
+                        elif self.sys.type == 'linear' :
+                            ret.append(np.intersection(self._l_jac_disc(t, x), self.sys.x_clip))
+                elif method == 'interconnect' :
+                    if self.sys.t_spec.type == 'continuous' :
+                        # Natural Inclusion with Replacements
+                        _x, x_ = get_lu(x)
+                        d_x, dx_ = self.f_replace(x)
+                        _xtp1 = _x + self.sys.t_spec.t_step * d_x
+                        x_tp1 = x_ + self.sys.t_spec.t_step * dx_
+                        ret.append(np.intersection(get_iarray(_xtp1, x_tp1), self.sys.x_clip))
+                    else :
+                        # Natural Inclusion Function
+                        ret.append(np.intersection(self.sys.f(x, self.control.iuCALC, self.dist.w(t,x))[0].reshape(-1), self.sys.x_clip))
+            _ret, ret_ = get_lu(np.array(ret))
+            return self.sys.ref(get_iarray(np.max(_ret, axis=0), np.min(ret_, axis=0)))
+        # Deterministic system
+        else :
+            if self.sys.t_spec.type == 'continuous' :
+                return x + self.sys.t_spec.t_step*self.sys.f(x,self.control.uCALC,self.dist.w(t,x))[0].reshape(-1)
+            else :
+                return self.sys.f(x,self.control.uCALC,self.dist.w(t,x))[0].reshape(-1)
+
+    def F (self, t, x) :
         if x.dtype == np.interval :
             ret = []
             for method in self.incl_opts.method.split('+') :

@@ -178,6 +178,7 @@ class NeuralNetworkControl (Control) :
         
         print('C: ', self.C)
 
+        print(self._d.dtype)
         print('pre  _d: ', self._d)
         print('pre  d_: ', self.d_)
 
