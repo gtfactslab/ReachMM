@@ -193,6 +193,7 @@ class NeuralNetworkControl (Control) :
         print('post _d: ', self._d)
         print('post d_: ', self.d_)
         print('\n')
+        self.d = get_iarray(self._d, self.d_)
     
     def __str__(self) -> str:
         return f'{str(self.nn)}, {self.mode} mode'

@@ -134,8 +134,8 @@ class System :
         self.Df_u_sym = self.f_eqn.jacobian(u_vars)
         self.Df_w_sym = self.f_eqn.jacobian(w_vars)
 
-        if (not self.Df_x_sym.free_symbols) and (not self.Df_u_sym.free_symbols) and (not self.Df_w_sym.free_symbols):
-        # if False:
+        # if (not self.Df_x_sym.free_symbols) and (not self.Df_u_sym.free_symbols) and (not self.Df_w_sym.free_symbols):
+        if False:
             self.A = sp.lambdify((), self.Df_x_sym, 'numpy', cse=my_cse)()[0]
             self.B = sp.lambdify((), self.Df_u_sym, 'numpy', cse=my_cse)()[0]
             self.Bp, self.Bn = d_positive(self.B)
@@ -273,6 +273,24 @@ class AutonomousSystem (ControlledSystem) :
         return f'''===== Autonomous System Definition =====
             \r{self.sys.__str__()}'''
 
+    def f_replace (self, x) :
+        # ret = np.empty_like(x)
+        d_x, dx_ = np.empty_like(x,np.float32), np.empty_like(x,np.float32)
+        
+        for i in range(len(x)) :
+            xi = np.copy(x)
+
+            tmpi = x[i]; tmpi.u = x[i].l; xi[i] = tmpi
+            xi = self.sys.ref(xi)
+            _reti = np.interval(self.sys.f_i[i] (xi, [0], [0])[0])
+            d_x[i] = _reti.l #if _reti.dtype == np.interval else _reti
+
+            xi = np.copy(x)
+            tmpi = x[i]; tmpi.l = x[i].u; xi[i] = tmpi
+            xi = self.sys.ref(xi)
+            ret_i = np.interval(self.sys.f_i[i] (xi, [0], [0])[0])
+            dx_[i] = ret_i.u #if ret_i.dtype == np.interval else ret_i
+        return d_x, dx_
 
 
 class NNCSystem (ControlledSystem) :
