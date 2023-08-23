@@ -136,6 +136,7 @@ class NeuralNetworkControl (Control) :
     
     # Primes the control if to work for a range of x_xh (finds _C, C_, _d, d_)
     def prime (self, x) :
+        x_pre = x
         x = self.g(x)
         if x.dtype != np.interval :
             return
@@ -168,6 +169,16 @@ class NeuralNetworkControl (Control) :
             print('_d', self._d)
             print('d_', self.d_)
             # input()
+        
+        self.tighten_relu(x_pre)
+
+    def tighten_relu (self, x) :
+        x = self.g(x)
+
+        if x.dtype != np.interval :
+            return
+            # raise Exception('Call prime with an interval array')
+        _x, x_ = get_lu(x)
 
         gp_m = gp.Model()
         gp_m.Params.LogToConsole = 0
@@ -175,7 +186,7 @@ class NeuralNetworkControl (Control) :
         gp_u = gp_m.addMVar((self.u_len,), lb=-GRB.INFINITY, ub=GRB.INFINITY, name="u")
         pred_constr = gml.add_predictor_constr(gp_m, self.nn.seq, gp_x, gp_u)
         objvars = gp_u - self._C@gp_x
-        
+
         print('C: ', self.C)
 
         print(self._d.dtype)

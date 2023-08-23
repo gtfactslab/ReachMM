@@ -19,4 +19,11 @@ clsys.set_four_corners()
 clsys.set_standard_ordering()
 
 invset = InvariantSetLocator(clsys)
-ret = invset.compute_invariant_set(InvariantSetLocator.Opts(verbose=True))
+ret = invset.compute_invariant_wedge_paralleletope(InvariantSetLocator.Opts(
+    linearization_pert=np.array([
+        np.interval(-0.4,0.4),
+        np.interval(-0.3,0.3),
+        np.interval(-0.21,0.21),
+        np.interval(-0.15,0.15),
+    ]),
+    verbose=True))

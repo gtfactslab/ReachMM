@@ -54,7 +54,9 @@ class WedgeParallaletope :
 
 class InvariantSetLocator :
     class Opts (NamedTuple) :
-        linearization_pert:ArrayLike = np.interval(-0.1,0.1)
+        initial_pert:ArrayLike = np.interval(-0.1,0.1)
+        linearization_pert:ArrayLike = np.zeros(0)
+        x_eq:ArrayLike = np.zeros(0)
         t_eq:int = 100
         verbose:bool = False
         ordering:Ordering = Ordering(())
@@ -64,7 +66,7 @@ class InvariantSetLocator :
     def __init__(self, clsys:NNCSystem) -> None:
         self.clsys = clsys
     
-    def compute_invariant_set (self, opts:Opts) -> Paralleletope :
+    def compute_invariant_wedge_paralleletope (self, opts:Opts) -> Paralleletope :
         """Compute invariant set of a closed-loop system.
 
         Args:
@@ -79,9 +81,19 @@ class InvariantSetLocator :
         q = self.clsys.sys.wlen
 
         dist = self.clsys.dist
-        onetraj = self.clsys.compute_trajectory(0,opts.t_eq,np.zeros(n))
-        xeq = onetraj(opts.t_eq)
-        x0 = xeq + opts.linearization_pert
+
+        if len(opts.x_eq) == 0 :
+            onetraj = self.clsys.compute_trajectory(0,opts.t_eq,np.zeros(n))
+            xeq = onetraj(opts.t_eq)
+        else :
+            xeq = opts.x_eq
+
+        if len(opts.linearization_pert) == 0 :
+            linearization_pert = opts.initial_pert
+        else :
+            linearization_pert = opts.linearization_pert
+
+        x0 = xeq + opts.initial_pert
         ueq = self.clsys.control.u(0,xeq)
         if opts.verbose :
             print(f'xeq: {xeq}'); print(f'x0:  {x0}'); print(f'ueq: {ueq}')
@@ -94,12 +106,21 @@ class InvariantSetLocator :
         if opts.verbose:
             print(f'Aeq: {Aeq}'); print(f'Beq: {Beq}'); print(f'Deq: {Deq}')
         
-        self.clsys.control.prime(x0)
-        self.clsys.control.step(0,x0)
+        self.clsys.control.prime(xeq + linearization_pert)
         Keq = self.clsys.control._C
         Acl = Aeq + Beq@Keq
         if opts.verbose :
             print(f'Keq: {Keq}'); print(f'Acl: {Acl}')
+        L, U = np.linalg.eig(Acl)
+        if opts.verbose :
+            print(f'L: {L}'); print(f'U: {U}')
+        
+        # Make bounds valid for xeq + initial_pert
+        self.clsys.control.tighten_relu(x0)
+        self.clsys.control.step(0,x0)
+        
+        if opts.verbose :
+            print(f'[d]: {self.clsys.control.d}')
         
         # Acl = U L U^{-1}
         # L = U^{-1} Acl U
@@ -144,13 +165,7 @@ class InvariantSetLocator :
         if opts.verbose :
             print(f'e: {e}')
 
-        L, U = np.linalg.eig(Acl)
-        if opts.verbose :
-            print(f'L: {L}'); print(f'U: {U}')
-        
-        rL = np.real(L)
-        iL = np.abs(np.imag(L))
-
+ 
         Tinv = np.empty_like(U, dtype=np.float64)
 
         polar_tuples = []
@@ -246,15 +261,25 @@ class InvariantSetLocator :
         phie = for_trans(e)
         _phie, phie_ = get_lu(phie)
 
+        dum_r = sp.symbols('dum_r')
+        # r_min = []
+        z0 = np.ones(n)*np.interval(-np.pi,np.pi)
+
+        for ri, thi in polar_tuples :
+            r_bounds = float(sp.solve((g_eqn[ri] + phie_[ri]).subs(z_vars[ri], dum_r))[0])
+            # Minimum r
+            z0[ri] = np.interval(-r_bounds,r_bounds)
+
         t_spec = ContinuousTimeSpec(0.1,0.1)
         g_sys = AutonomousSystem(z_vars, g_eqn, t_spec)
         
-        z0 = np.array([
-            np.interval(0,0.04261/1.00581350080842),
-            np.interval(-np.pi,np.pi),
-            np.interval(0,0.1062/0.43401876933699),
-            np.interval(-np.pi,np.pi),
-        ])
+        # z0 = np.array([
+        #     # np.interval(0,0.04261/1.00581350080842),
+        #     np.interval(0.04,0.05),
+        #     np.interval(-np.pi,np.pi),
+        #     np.interval(0.04,0.05),
+        #     np.interval(-np.pi,np.pi),
+        # ])
         # z0 = np.array([
         #     np.interval(0.005,0.006),
         #     np.interval(-np.pi,np.pi),
@@ -263,12 +288,13 @@ class InvariantSetLocator :
         # ])
 
         overset = Tinv@inv_trans(z0) + xeq
+        print(f'z0: {z0}')
         print(f'overset: {overset}')
         print(f'x0: {x0}')
         print(np.subseteq(overset, x0))
 
         _g, g_ = g_sys.f_replace(z0)
-        print(_g + _phie)
+        print(_g - phie_)
         print(g_ + phie_)
 
         # for i, xr_i in enumerate(xr) :
