@@ -130,9 +130,9 @@ class System :
         self.f_len = len(self.f_i)
 
 
-        self.Df_x_sym = self.f_eqn.jacobian(x_vars)
-        self.Df_u_sym = self.f_eqn.jacobian(u_vars)
-        self.Df_w_sym = self.f_eqn.jacobian(w_vars)
+        self.Df_x_sym = sp.simplify(self.f_eqn.jacobian(x_vars))
+        self.Df_u_sym = sp.simplify(self.f_eqn.jacobian(u_vars))
+        self.Df_w_sym = sp.simplify(self.f_eqn.jacobian(w_vars))
 
         # if (not self.Df_x_sym.free_symbols) and (not self.Df_u_sym.free_symbols) and (not self.Df_w_sym.free_symbols):
         if False:

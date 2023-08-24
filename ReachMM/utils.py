@@ -283,8 +283,3 @@ def jordan_canonical (A:ArrayLike, verbose:bool=False) :
         print(f'J (real): {J}')
 
     return P, J
-
-A = np.array([[0,2],[-1,-1]])
-P, J = jordan_canonical(A, True)
-
-print(P@J@np.linalg.inv(P))

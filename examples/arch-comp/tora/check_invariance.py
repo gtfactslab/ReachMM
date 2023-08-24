@@ -29,8 +29,8 @@ ret = invset.compute_invariant_wedge_paralleletope(InvariantSetLocator.Opts(
     initial_pert=np.array([
         np.interval(-0.8,0.8),
         np.interval(-0.8,0.8),
-        np.interval(-0.6,0.6),
-        np.interval(-0.6,0.6),
+        np.interval(-1,1),
+        np.interval(-1,1),
         # np.interval(-0.1,0.1),
         # np.interval(-0.1,0.1),
         # np.interval(-0.3,0.3),

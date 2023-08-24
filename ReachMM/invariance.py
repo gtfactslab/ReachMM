@@ -112,6 +112,7 @@ class InvariantSetLocator :
         if opts.verbose :
             print(f'Keq: {Keq}'); print(f'Acl: {Acl}')
         L, U = np.linalg.eig(Acl)
+        reL = np.real(L); imL = np.imag(L)
         if opts.verbose :
             print(f'L: {L}'); print(f'U: {U}')
         
@@ -258,6 +259,9 @@ class InvariantSetLocator :
         print(g_eqn)
         print(for_trans(e))
 
+        TE = np.max([np.abs(Te_), np.abs(_Te)], axis=0)
+        print(TE.shape)
+
         phie = for_trans(e)
         _phie, phie_ = get_lu(phie)
 
@@ -269,6 +273,7 @@ class InvariantSetLocator :
             r_bounds = float(sp.solve((g_eqn[ri] + phie_[ri]).subs(z_vars[ri], dum_r))[0])
             # Minimum r
             z0[ri] = np.interval(-r_bounds,r_bounds)
+            print(f'sig + TE + TE: {reL[ri] + TE[ri] + TE[ri+1]}')
 
         t_spec = ContinuousTimeSpec(0.1,0.1)
         g_sys = AutonomousSystem(z_vars, g_eqn, t_spec)
